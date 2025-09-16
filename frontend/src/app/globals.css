@@ -1,0 +1,308 @@
+/* globals.css — unified dark/light theme with pro-level UI elements */
+
+/* -------------------- Base Reset -------------------- */
+* { box-sizing: border-box; }
+html, body, #__next { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--background-dark);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* -------------------- Theme Variables -------------------- */
+:root {
+  --background-dark: #0b0b0b;
+  --background-card: rgba(18, 18, 18, 0.85);
+  --background-light: #111214;
+  --text-primary: #e6edf3;
+  --text-secondary: #9ba3b4;
+  --text-tertiary: #58a6ff;
+
+  --accent-primary: #58a6ff;
+  --accent-primary-hover: #79c0ff;
+  --accent-destructive: #f85149;
+  --accent-destructive-hover: #fa7972;
+
+  --border-primary: #222226;
+  --border-secondary: #2d2d33;
+
+  --code-editor: #0d1117;
+  --code-block: #161b22;
+}
+
+/* Light theme overrides (optional, add .light-theme to <html> to activate) */
+.light-theme {
+  --background-dark: #f5f5f7;
+  --background-card: rgba(255,255,255,0.95);
+  --background-light: #ffffff;
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-tertiary: #2563eb;
+
+  --accent-primary: #2563eb;
+  --accent-primary-hover: #3b82f6;
+  --accent-destructive: #dc2626;
+  --accent-destructive-hover: #ef4444;
+
+  --border-primary: #e6e9ee;
+  --border-secondary: #d1d5db;
+
+  --code-editor: #f9fafb;
+  --code-block: #f3f4f6;
+}
+
+/* -------------------- Layout -------------------- */
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.layout-grid {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 32px;
+  align-items: start;
+}
+@media (max-width: 960px) {
+  .layout-grid { grid-template-columns: 1fr; }
+}
+
+/* -------------------- Header -------------------- */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.app-title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(90deg, var(--accent-primary), #a855f7, #ec4899);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.app-tagline {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+/* -------------------- Cards & Panels -------------------- */
+.card {
+  background: var(--background-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.26);
+}
+.results-card { height: 100%; display: flex; flex-direction: column; }
+
+/* -------------------- Code Input -------------------- */
+.code-input {
+  width: 100%;
+  min-height: 280px;
+  font-family: var(--font-fira-code), ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+  background: var(--code-editor);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  padding: 12px;
+  border-radius: 8px;
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.45;
+  transition: border-color 0.2s ease;
+}
+.code-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(88,166,255,0.25);
+}
+
+/* -------------------- laser -------------------- */
+/* in globals.css or a dedicated css module */
+.btn-laser {
+  position: relative;
+  overflow: hidden;
+}
+.btn-laser::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -75%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(
+    120deg,
+    transparent,
+    rgba(255,255,255,0.4),
+    transparent
+  );
+  transform: skewX(-20deg);
+}
+.btn-laser:hover::before {
+  animation: laserSlide 0.75s forwards;
+}
+@keyframes laserSlide {
+  0%   { left: -75%; }
+  100% { left: 125%; }
+}
+
+
+
+
+
+/* -------------------- Buttons -------------------- */
+
+
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  background: none;
+  color: var(--text-primary);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn:hover:not(:disabled) { transform: translateY(-1px); }
+
+.btn-primary {
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary-hover));
+  color: white;
+  border: 1px solid rgba(255,255,255,0.06);
+  box-shadow: 0 6px 18px rgba(88,166,255,0.08);
+}
+.btn-secondary {
+  background: var(--background-light);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+/* -------------------- Select / Inputs -------------------- */
+.input-base {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--background-light);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+}
+.input-base:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(88,166,255,0.25);
+}
+
+/* -------------------- Pro Toggle Switches -------------------- */
+.toggle-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.toggle-card {
+  background: var(--background-card);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.toggle-card:hover {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(88,166,255,0.25);
+}
+
+.toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.toggle-info h5 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.toggle-info p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* switch style */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #444;
+  border-radius: 24px;
+  transition: 0.3s;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px; width: 18px;
+  left: 3px; bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.3s;
+}
+.switch input:checked + .slider {
+  background-color: var(--accent-primary);
+}
+.switch input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+/* -------------------- Misc -------------------- */
+.helper {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-top: 8px;
+}
+.processing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-secondary);
+}
+.fade-in {
+  animation: fadeIn 220ms ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+

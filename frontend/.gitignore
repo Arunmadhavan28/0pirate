@@ -1,0 +1,49 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# Dependencies
+# ----------------------------------------------------------------
+# This is the most important line. Never commit your dependencies.
+/node_modules
+
+# Build files
+# ----------------------------------------------------------------
+# The output of your build process.
+/.next/
+/out/
+/build/
+
+# Environment Variables
+# ----------------------------------------------------------------
+# Never commit secrets, API keys, or other sensitive information.
+# Use an .env.example file to show what variables are needed.
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+# ----------------------------------------------------------------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test runner files
+# ----------------------------------------------------------------
+/coverage
+.jest-cache
+
+# Editor directories and files
+# ----------------------------------------------------------------
+.vscode
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# Operating System files
+# ----------------------------------------------------------------
+.DS_Store
+Thumbs.db
