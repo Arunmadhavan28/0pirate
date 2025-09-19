@@ -359,6 +359,105 @@ def build_correction_prompt(file_path: str, code: str, error_message: Optional[s
     else:
         return instruction + error_section + code_section
 
+from typing import Dict, Optional
+
+def build_error_fix_prompt(
+    project_files: Dict[str, str],
+    error_log: str,
+    *,
+    task: Optional[str] = None,
+    token_saver_enabled: bool = False
+) -> str:
+    """
+    Builds a production-grade, standardized debugging prompt that works across
+    all programming languages and multi-file projects.
+    
+    Features:
+    - Universal language handling with safe fallbacks
+    - Clear role priming for reliability
+    - Structured instructions to ensure predictable, trusted outputs
+    - Example-driven for consistency across runs
+    """
+
+    # 1. Assemble project structure tree
+    file_tree = "".join(f"- {path}\n" for path in sorted(project_files.keys()))
+
+    # 2. Prepare file contents with safe code fences
+    files_content = ""
+    for path, content in project_files.items():
+        lang = language_hint_from_filename(path) or "plaintext"
+        safe_content = content.replace("```", "``\\`")
+        files_content += f"---\n**File: {path}**\n```{lang}\n{safe_content}\n```\n\n"
+
+    # 3. Add optional user task
+    task_instruction = (
+        f"The user has also provided a specific instruction: **{task}**. "
+        f"Prioritize this while fixing the error.\n"
+        if task else ""
+    )
+
+    # 4. Core instructions (separated by token saver mode)
+    if token_saver_enabled:
+        # Compact version — strictly code only
+        instructions = (
+            "ROLE: Expert Principal Engineer Debugger\n"
+            "Your sole task is to FIX the error shown in the terminal log.\n\n"
+            f"{task_instruction}"
+            "RESPONSE RULES:\n"
+            "- Return ONLY the corrected code.\n"
+            "- Include the FULL content of every modified file.\n"
+            "- Do NOT output explanations, analysis, or commentary.\n"
+            "- Do NOT invent new files or functions unless clearly required by the error.\n"
+        )
+    else:
+        # Full version — analysis + plan + implementation
+        instructions = (
+            "ROLE: Expert Principal Engineer Debugger\n"
+            "You are tasked with analyzing and fixing the error shown in the terminal log.\n\n"
+            "RESPONSE FORMAT (strictly follow):\n"
+            "1. <analysis> block\n"
+            "   - Perform a clear, step-by-step reasoning (chain-of-thought style) about the root cause.\n"
+            "   - Explain why the error occurred.\n"
+            "   - Outline a concrete plan to fix it.\n"
+            "2. Corrected Code Section\n"
+            "   - Provide the COMPLETE, FIXED code for every file you modify.\n"
+            "   - Preserve unmodified code in those files.\n"
+            "   - Always use correct language fences (```lang).\n\n"
+            f"{task_instruction}"
+            "ADDITIONAL RULES:\n"
+            "- Do NOT output partial snippets; include full file(s).\n"
+            "- Do NOT invent files or functions unless necessary.\n"
+            "- Maintain original style, formatting, and comments.\n\n"
+            "--- EXAMPLE RESPONSE ---\n"
+            "<analysis>\n"
+            "**Root Cause**: `TypeError: unsupported operand type(s) for +: 'int' and 'str'`\n"
+            "was caused by attempting to add an integer to a string.\n\n"
+            "**Plan**: Convert the string to an integer before performing addition.\n"
+            "</analysis>\n\n"
+            "**File: utils.py**\n"
+            "```python\n"
+            "def get_offset_id(request):\n"
+            "    user_id_str = get_user_id_from_request(request)\n"
+            "    # Fix: convert string to integer\n"
+            "    user_id_int = int(user_id_str)\n"
+            "    return user_id_int + 100\n"
+            "```\n"
+            "--- END EXAMPLE ---\n\n"
+            "Now, apply this exact process to the provided project."
+        )
+
+    # 5. Assemble final structured prompt
+    context_block = f"**Terminal Output (Error Log):**\n```\n{error_log}\n```\n\n"
+    prompt = (
+        f"{instructions}\n\n"
+        f"**Project Structure:**\n{file_tree}\n"
+        f"{context_block}"
+        f"**File Contents:**\n{files_content}"
+    )
+
+    return prompt
+
+
 
 # -------------------------
 # Parsing / Response handling
@@ -532,6 +631,7 @@ __all__ = [
     "language_hint_from_filename",
     "build_correction_prompt",
     "build_strict_json_retry_prompt",
+    "build_error_fix_prompt", 
     "retry_with_backoff",
     "RetryConfig",
 ]

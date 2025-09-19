@@ -15,7 +15,7 @@ class Settings:
     groq_key: str | None = os.getenv("GROQ_API_KEY")
     ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
     qwen_host: str = os.getenv("QWEN_HOST", "http://127.0.0.1:11434")
-
+    
     # Supabase
     supabase_url: str | None = os.getenv("SUPABASE_URL")
     supabase_key: str | None = os.getenv("SUPABASE_KEY")

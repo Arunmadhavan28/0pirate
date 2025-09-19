@@ -994,3 +994,107 @@ if __name__ == "__main__":
     # run
     out = run_with_concurrency_analysis(code, tests, args.lang, timeout_seconds=args.timeout, allow_local_execution=args.allow_local)
     print(json.dumps(out, indent=2))
+
+
+def run_command_in_sandbox(
+    command: List[str],
+    files: Dict[str, str],
+    image: str,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> Dict[str, Any]:
+    """
+    Runs an arbitrary command in a secure, isolated Docker container with provided files.
+
+    Args:
+        command: The command to execute as a list of strings (e.g., ["npx", "eslint", "main.js"]).
+        files: A dictionary mapping filenames to their content, which will be placed in the container.
+        image: The Docker image to use for the container (e.g., "node:20-slim").
+        timeout_seconds: The maximum execution time for the command.
+
+    Returns:
+        A dictionary containing stdout, stderr, exit_code, and other diagnostics.
+    """
+    if docker is None:
+        raise ImportError("Docker SDK is not available. Cannot run sandbox.")
+
+    start_time = time.time()
+    workspace_root = tempfile.mkdtemp(prefix="sandbox_cmd_", dir=SANDBOX_TMP_ROOT)
+    diagnostics: Dict[str, Any] = {
+        "docker_ok": False,
+        "image": image,
+        "container_timed_out": False,
+        "workspace": workspace_root,
+        "command": " ".join(command),
+    }
+    container = None
+    client = None
+
+    try:
+        # Write all provided files into the workspace
+        for filename, content in files.items():
+            # Ensure subdirectories are created if path contains them
+            file_path = os.path.join(workspace_root, filename)
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+        client = docker.from_env(timeout=5)
+        client.ping()
+        diagnostics["docker_ok"] = True
+
+        volumes = {workspace_root: {"bind": "/app", "mode": "rw"}}
+
+        # Pull the image if it's not present
+        try:
+            client.images.get(image)
+        except docker.errors.ImageNotFound:
+            logger.info("Pulling Docker image: %s", image)
+            client.images.pull(image)
+
+        container = client.containers.run(
+            image=image,
+            command=command,
+            volumes=volumes,
+            working_dir="/app",
+            detach=True,
+            network_disabled=DISABLE_NETWORK,
+            mem_limit=MEMORY_LIMIT,
+            cpu_shares=CPU_SHARES,
+        )
+
+        # Poll for completion with timeout
+        try:
+            result = container.wait(timeout=timeout_seconds)
+            exit_code = result.get("StatusCode", -1)
+        except (Exception, KeyboardInterrupt):
+            diagnostics["container_timed_out"] = True
+            container.kill()
+            exit_code = -1 # Indicate timeout
+
+        stdout = container.logs(stdout=True, stderr=False).decode("utf-8", "ignore")
+        stderr = container.logs(stdout=False, stderr=True).decode("utf-8", "ignore")
+
+        return {
+            "stdout": stdout,
+            "stderr": stderr,
+            "exit_code": exit_code,
+            "runtime_seconds": time.time() - start_time,
+            "diagnostics": diagnostics,
+        }
+    except Exception as e:
+        logger.exception("Generic sandbox command failed unexpectedly.")
+        return {
+            "stdout": "",
+            "stderr": str(e),
+            "exit_code": -1,
+            "runtime_seconds": time.time() - start_time,
+            "diagnostics": diagnostics,
+        }
+    finally:
+        if container:
+            try:
+                container.remove(force=True)
+            except Exception:
+                pass
+        if workspace_root and os.path.exists(workspace_root):
+            shutil.rmtree(workspace_root)

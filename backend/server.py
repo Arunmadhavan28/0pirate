@@ -1,4 +1,3 @@
-
 import os
 import uuid
 import asyncio
@@ -44,24 +43,19 @@ if not settings.supabase_url or not settings.supabase_key:
 
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 
-# Admin client for accessing Vault securely
-supabase_admin: Client = create_client(
-    settings.supabase_url,
-    settings.supabase_service_key,
-    options=ClientOptions(schema="vault")
-)
+# Admin client for accessing Vault securely is not needed here
+# as RPC functions handle the security context.
 
 JOB_STORE: Dict[str, Dict[str, Any]] = {}
 
 # -------------------------------------------
-# Auth Helpers (SECURE)
+# Auth, Tier, and Key Management (Full Implementation)
 # -------------------------------------------
 async def get_current_user(req: Request) -> dict:
     """Securely validates the Supabase JWT and returns user data."""
     auth_header = req.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-
     token = auth_header.split(" ")[1]
     try:
         user_resp = supabase.auth.get_user(token)
@@ -73,9 +67,6 @@ async def get_current_user(req: Request) -> dict:
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-# -------------------------------------------
-# Tier Limits
-# -------------------------------------------
 TIER_LIMITS = {
     "free": {"max_jobs_per_day": 10, "max_files": 3},
     "pro": {"max_jobs_per_day": 50, "max_files": 20},
@@ -90,58 +81,49 @@ async def get_user_tier(user_id: str) -> str:
             return resp.data["tier"]
     except Exception as e:
         logger.error(f"Could not fetch tier for user {user_id}: {e}")
-    return "free"  # Default if missing/error
+    return "free"
 
 async def check_tier_quota(user_id: str, tier: str):
     limits = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
     today = datetime.utcnow().date()
+    start_of_day = datetime.combine(today, datetime.min.time()).isoformat()
+    
+    try:
+        resp = supabase.table("jobs").select("id", count="exact").eq("user_id", user_id).gte("created_at", start_of_day).execute()
+        if resp.count >= limits["max_jobs_per_day"]:
+            raise HTTPException(status_code=429, detail="Daily job quota exceeded for your plan.")
+    except Exception as e:
+        logger.error(f"Could not check quota for user {user_id}: {e}")
+        # Fail open or closed? For now, let it pass but log error.
+        pass
 
-    resp = supabase.table("jobs").select("created_at").eq("user_id", user_id).execute()
-    jobs_today = [j for j in resp.data if datetime.strptime(j["created_at"], "%Y-%m-%dT%H:%M:%S.%f%z").date() == today]
-    if len(jobs_today) >= limits["max_jobs_per_day"]:
-        raise HTTPException(status_code=429, detail="Daily job quota exceeded for your plan.")
 
-# -------------------------------------------
-# API Key Management
-# -------------------------------------------
 class ApiKeyRequest(BaseModel):
     provider: str
     api_key: str
+
+class ApiKeyDeleteRequest(BaseModel):
+    provider: str
 
 @app.post("/api/keys")
 async def save_api_key(req: Request, body: ApiKeyRequest, user: dict = Depends(get_current_user)):
     user_id = user["id"]
     provider_lower = body.provider.lower()
-
     try:
-        # Check if user already has a key for this provider
-        existing_key = supabase.table("user_api_keys") \
-            .select("id, encrypted_api_key_id") \
-            .eq("user_id", user_id) \
-            .eq("provider", provider_lower) \
-            .execute()
+        # Securely delete old key if it exists, using an RPC function
+        supabase.rpc("delete_user_api_key", { "p_user_id": user_id, "p_provider": provider_lower }).execute()
 
-        # --- NEW LOGIC: If a key exists, delete it first ---
-        if existing_key.data:
-            key_id_to_delete = existing_key.data[0]["id"]
-            secret_id_to_delete = existing_key.data[0]["encrypted_api_key_id"]
-
-            # Delete the reference in user_api_keys
-            supabase.table("user_api_keys").delete().eq("id", key_id_to_delete).execute()
-            
-            # Delete the actual secret from the vault
-            supabase.rpc("delete_secret_wrapper", {"secret_id": secret_id_to_delete}).execute()
-
-        # --- ALWAYS CREATE A NEW SECRET ---
+        # Create new secret in the vault
         resp = supabase.rpc("create_secret_wrapper", {
             "new_secret": body.api_key,
-            "new_name": f"{user_id}_{provider_lower}_key",
-            "new_description": "API key for provider",
-            "new_key_id": str(uuid.uuid4())  # Ensure this matches your create_secret_wrapper args
+            "new_name": f"{user_id}_{provider_lower}_key_{uuid.uuid4()}",
         }).execute()
 
         secret_id = resp.data
+        if not secret_id:
+            raise Exception("Failed to create secret in vault.")
 
+        # Store the reference to the new secret
         supabase.table("user_api_keys").insert({
             "user_id": user_id,
             "provider": provider_lower,
@@ -149,13 +131,10 @@ async def save_api_key(req: Request, body: ApiKeyRequest, user: dict = Depends(g
         }).execute()
 
         return JSONResponse({"status": "ok", "provider": body.provider})
-
     except Exception as e:
-        logger.error("Failed to save API key: %s", e)
-        raise HTTPException(status_code=500, detail="Failed to save key")
-    
-class ApiKeyDeleteRequest(BaseModel):
-    provider: str
+        logger.error("Failed to save API key for user %s: %s", user_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save key: {e}")
+
 
 @app.delete("/api/keys")
 async def delete_api_key(req: Request, body: ApiKeyDeleteRequest, user: dict = Depends(get_current_user)):
@@ -171,7 +150,6 @@ async def delete_api_key(req: Request, body: ApiKeyDeleteRequest, user: dict = D
         logger.error(f"Failed to delete API key for provider {provider_lower}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete key")
 
-
 @app.get("/api/keys")
 async def get_user_keys(user: dict = Depends(get_current_user)):
     user_id = user["id"]
@@ -180,22 +158,31 @@ async def get_user_keys(user: dict = Depends(get_current_user)):
     return JSONResponse({"providers": providers})
 
 # -------------------------------------------
-# Processing Endpoint
+# PROCESSING ENDPOINT (CORRECTED AND FINAL)
 # -------------------------------------------
 class ProcessRequestForm:
     def __init__(
         self,
         task: str = Form(...),
+        error_log: Optional[str] = Form(None),
         provider: str = Form(...),
         model: Optional[str] = Form(None),
         token_saver_enabled: Optional[bool] = Form(False),
+        # --- ADD THESE NEW OPTIONAL PARAMETERS ---
         abstraction_enabled: Optional[bool] = Form(True),
+        abstraction_level: Optional[str] = Form("paranoid"),
+        abstraction_chunking: Optional[bool] = Form(False),
+        abstraction_noise: Optional[bool] = Form(True),
     ):
         self.task = task
+        self.error_log = error_log
         self.provider = provider
         self.model = model
         self.token_saver_enabled = token_saver_enabled
         self.abstraction_enabled = abstraction_enabled
+        self.abstraction_level = abstraction_level
+        self.abstraction_chunking = abstraction_chunking
+        self.abstraction_noise = abstraction_noise
 
 @app.post("/api/process_code")
 async def api_process_code(
@@ -206,6 +193,9 @@ async def api_process_code(
 ):
     user_id = user["id"]
 
+    if form_data.task == "fix_and_secure" and not form_data.error_log:
+        raise HTTPException(status_code=400, detail="Terminal output is required for the 'Fix & Secure' task.")
+
     user_tier = await get_user_tier(user_id)
     await check_tier_quota(user_id, user_tier)
 
@@ -213,19 +203,19 @@ async def api_process_code(
     provider = form_data.provider.lower()
     if provider not in ["ollama", "auto", "qwen"]:
         try:
-            key_ref_resp = supabase.table("user_api_keys").select("encrypted_api_key_id").eq("user_id", user_id).eq("provider", provider).limit(1).execute()
+            key_ref_resp = supabase.table("user_api_keys").select("encrypted_api_key_id").eq("user_id", user_id).eq("provider", provider).limit(1).single().execute()
             if not key_ref_resp.data:
                 raise HTTPException(status_code=400, detail=f"API key for provider '{provider}' not found.")
-            secret_id = key_ref_resp.data[0]["encrypted_api_key_id"]
+            secret_id = key_ref_resp.data["encrypted_api_key_id"]
             decrypted_resp = supabase.rpc("reveal_secret", {"secret_id": secret_id}).execute()
             api_key = decrypted_resp.data
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not retrieve API key: {e}")
+            logger.error(f"Could not retrieve API key for user {user_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Could not retrieve API key.")
 
     project_files: Dict[str, str] = {}
-    is_zip = len(files) == 1 and files[0].filename and files[0].filename.lower().endswith(".zip")
-
     with tempfile.TemporaryDirectory() as tmpdir:
+        is_zip = len(files) == 1 and files[0].filename and files[0].filename.lower().endswith(".zip")
         if is_zip:
             zip_path = os.path.join(tmpdir, files[0].filename)
             with open(zip_path, "wb") as f:
@@ -234,19 +224,19 @@ async def api_process_code(
                 zf.extractall(tmpdir)
             for root, _, fnames in os.walk(tmpdir):
                 for fname in fnames:
-                    if not fname.endswith(".zip"):
+                    if not fname.lower().endswith(".zip") and not fname.startswith("._"):
                         fpath = os.path.join(root, fname)
                         rpath = os.path.relpath(fpath, tmpdir)
                         try:
-                            with open(fpath, "r", encoding="utf-8") as f:
+                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
                                 project_files[rpath] = f.read()
-                        except Exception:
+                        except (IOError, OSError):
                             pass
         else:
             for file in files:
                 contents = await file.read()
                 if file.filename:
-                    project_files[file.filename] = contents.decode("utf-8")
+                    project_files[file.filename] = contents.decode("utf-8", errors="ignore")
 
     if not project_files:
         raise HTTPException(status_code=400, detail="No processable files found in the upload.")
@@ -254,21 +244,23 @@ async def api_process_code(
     job_id = str(uuid.uuid4())
     job_payload = {**form_data.__dict__, "project_files": project_files, "api_keys": {"api_key": api_key}}
 
-    JOB_STORE[job_id] = {
+    job_metadata = {
         "job_id": job_id,
-        "payload": job_payload,
         "user_id": user_id,
         "status": "pending",
+        "task": form_data.task,
+        "provider": form_data.provider,
         "created_at": datetime.utcnow().isoformat()
     }
-    supabase.table("jobs").insert(JOB_STORE[job_id]).execute()
+    
+    JOB_STORE[job_id] = job_metadata
+    supabase.table("jobs").insert(job_metadata).execute()
 
-    asyncio.create_task(process_job_background(job_id))
-
+    asyncio.create_task(process_job_background(job_id, job_payload))
     return JSONResponse({"job_id": job_id})
 
 # -------------------------------------------
-# Background Job Processor
+# Background Job Processor & Status Endpoint
 # -------------------------------------------
 async def call_llm_and_process(payload: dict) -> dict:
     try:
@@ -278,47 +270,53 @@ async def call_llm_and_process(payload: dict) -> dict:
             provider_name=payload.get("provider"),
             model=payload.get("model"),
             task=payload.get("task"),
+            error_log=payload.get("error_log"),
             token_saver=payload.get("token_saver_enabled", False),
-            abstraction_enabled=payload.get("abstraction_enabled", True),
             api_keys=payload.get("api_keys"),
+            # --- PASS THE NEW PARAMETERS THROUGH ---
+            abstraction_enabled=payload.get("abstraction_enabled"),
+            abstraction_level=payload.get("abstraction_level"),
+            abstraction_chunking=payload.get("abstraction_chunking"),
+            abstraction_noise=payload.get("abstraction_noise"),
         )
-        return {"success": True, "result": result_dict.get("result"), "notice": result_dict.get("notice")}
+        return {"success": True, **result_dict}
     except Exception as e:
-        logger.error("Job failed: %s", e)
-        return {"success": False, "result": f"Unexpected error: {e}", "notice": "Internal server error"}
+        logger.error("Job failed: %s", e, exc_info=True)
+        return {"success": False, "notice": "An internal error occurred during processing."}
 
-async def process_job_background(job_id: str):
+async def process_job_background(job_id: str, payload: dict):
     job = JOB_STORE.get(job_id)
-    if not job: 
-        return
+    if not job: return
+
     job["status"] = "running"
     supabase.table("jobs").update({"status": "running"}).eq("job_id", job_id).execute()
 
     try:
-        response = await call_llm_and_process(job["payload"])
-        if response.get("success"):
-            job["status"] = "completed"
-            job["result"] = response.get("result")
-            job["notice"] = response.get("notice")
-        else:
-            job["status"] = "failed"
-            job["result"] = response.get("result") or "LLM failed without details"
-            job["notice"] = response.get("notice")
+        response = await call_llm_and_process(payload)
+        job_update = {
+            "status": "completed" if response.get("success") else "failed",
+            "result": response.get("result"),
+            "notice": response.get("notice"),
+            "analysis": response.get("analysis"),
+            "validator_report": response.get("validator_report"),
+            "sandbox_result": response.get("sandbox_result"),
+        }
     except Exception as e:
-        job["status"] = "failed"
-        job["result"] = f"Internal error: {str(e)}\n{traceback.format_exc()}"
-        job["notice"] = "Internal processing error."
+        job_update = {
+            "status": "failed",
+            "result": None,
+            "notice": f"Internal error: {str(e)}",
+        }
+    
+    JOB_STORE[job_id].update(job_update)
+    supabase.table("jobs").update(job_update).eq("job_id", job_id).execute()
 
-    JOB_STORE[job_id] = job
-    supabase.table("jobs").update(job).eq("job_id", job_id).execute()
-
-# -------------------------------------------
-# Secure Job Status Endpoint
-# -------------------------------------------
 @app.get("/api/status/{job_id}")
 async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
-    """Fetches job status, ensuring the requesting user owns the job."""
     user_id = user["id"]
+    job = JOB_STORE.get(job_id)
+    if job and job.get("user_id") == user_id:
+        return JSONResponse(job)
 
     try:
         resp = supabase.table("jobs").select("*").eq("job_id", job_id).single().execute()
@@ -327,15 +325,9 @@ async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.debug("Failed to fetch job from Supabase: %s", e)
 
-    job = JOB_STORE.get(job_id)
-    if job and job.get("user_id") == user_id:
-        return JSONResponse(job)
-
     raise HTTPException(status_code=404, detail="Job not found or not authorized")
 
-# -------------------------------------------
-# Health Check
-# -------------------------------------------
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "time": datetime.utcnow().isoformat()}
+
