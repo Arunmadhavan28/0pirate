@@ -16,6 +16,9 @@ const firaCode = Fira_Code({
 export const metadata: Metadata = {
   title: "0Pirate: AI-Powered Code Security & Refactoring",
   description: "Secure, refactor, and enhance your code with the power of LLMs. Handles single files, multi-file projects, and zip uploads with maximum privacy.",
+   icons: {
+    icon: '/favicon.ico', // This points to the favicon in the /app directory
+  },
 };
 
 export default function RootLayout({

@@ -123,16 +123,31 @@ def process_code_submission(
 
         # --- STEP 3: RESTORE AND PREPARE FOR VALIDATION ---
         restored_abstracted_files = {}
-        for path, content in modified_files.items():
-            original_path = path
-            if path in abstraction_maps:
-                restored_abstracted_files[original_path] = restore_abstracted(content, abstraction_maps[path])
-            else:
-                restored_abstracted_files[original_path] = content
+        # --- START: UPGRADED RESTORATION LOGIC ---
+        # This logic is now robust to filename mismatches from the AI/parser.
+        if len(modified_files) == 1 and len(abstraction_maps) == 1:
+            # Handle the common single-file case, even if the AI changed the filename.
+            original_path = list(abstraction_maps.keys())[0]
+            modified_content = list(modified_files.values())[0]
+            abstraction_map = abstraction_maps[original_path]
+            restored_abstracted_files[original_path] = restore_abstracted(modified_content, abstraction_map)
+        else:
+            # Original logic for multi-file projects where filenames must match.
+            for path, content in modified_files.items():
+                if path in abstraction_maps:
+                    restored_abstracted_files[path] = restore_abstracted(content, abstraction_maps[path])
+                else:
+                    # If a file wasn't abstracted, pass its content through directly.
+                    restored_abstracted_files[path] = content
+        # --- END: UPGRADED RESTORATION LOGIC ---
         
+        repaired_files = restored_abstracted_files.copy()
+        # --- END: MODIFIED RESTORATION LOGIC ---
+
         repaired_files = restored_abstracted_files.copy()
 
         # --- STEP 4: INTELLIGENT CORRECTION LOOP ---
+        last_known_error = None
         for attempt in range(MAX_CORRECTION_ATTEMPTS):
             # 4.1 Run the powerful, multi-tool validator on the AI's latest fix
             current_validation = validate_files(repaired_files)
@@ -143,7 +158,11 @@ def process_code_submission(
                         error_findings.append({"file": file_path, **finding})
 
             if not error_findings:
+                last_known_error = None # Clear the error state on success
                 break  # Success! The code is valid.
+
+            # If errors are found, store the first one to report to the user in case of total failure.
+            last_known_error = f"In file '{error_findings[0].get('file')}': {error_findings[0].get('message')}"
 
             # 4.2 If invalid, build a precise correction prompt and retry
             correction_payload = {
@@ -169,6 +188,20 @@ def process_code_submission(
             repaired_files = parsed_correction
 
         # --- STEP 5: FINAL SANDBOX AND OUTPUT ---
+
+        # --- START: THE MISSING SAFETY CHECK ---
+        # After the loop, if there is still a known error, the AI failed to fix it.
+        if last_known_error:
+            logger.error(f"AI failed to produce a valid fix after {MAX_CORRECTION_ATTEMPTS} attempts.")
+            return {
+                "result": restored_abstracted_files, # Return the last known attempt
+                "analysis": analysis, # Return the original analysis
+                "notice": f"AI Correction Failed. The AI's suggested code was invalid and could not be fixed after {MAX_CORRECTION_ATTEMPTS} attempts. Last known error: {last_known_error}",
+                "sandbox_result": None,
+            }
+        # --- END: THE MISSING SAFETY CHECK ---
+
+        # This is the success path, which only runs if the 'last_known_error' check passes.
         final_files = {**project_files, **repaired_files}
         final_files = {p: restore_secrets(c, secret_maps.get(p, {})) for p, c in final_files.items()}
         
@@ -182,10 +215,26 @@ def process_code_submission(
                 language=language_hint_from_filename(main_file_path),
             )
 
+        output_result: Dict[str, Any]
+        if token_saver:
+            diffs: Dict[str, str] = {}
+            for path, new_content in repaired_files.items():
+                original_content = project_files.get(path, "")
+                diff_lines = difflib.unified_diff(
+                    original_content.splitlines(keepends=True),
+                    new_content.splitlines(keepends=True),
+                    fromfile=f"a/{path}", tofile=f"b/{path}",
+                )
+                diff_text = "".join(diff_lines)
+                diffs[path] = diff_text if diff_text else new_content
+            output_result = diffs
+        else:
+            output_result = {p: final_files.get(p) for p in sorted(repaired_files.keys())}
+            
         return {
-            "result": {p: final_files.get(p) for p in sorted(repaired_files.keys())},
+            "result": output_result,
             "analysis": analysis,
-            "notice": "Debug process completed.",
+            "notice": "Debug process completed successfully.",
             "sandbox_result": sandbox_result,
         }
 
