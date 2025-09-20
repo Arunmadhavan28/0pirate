@@ -439,10 +439,12 @@ function MainApp({ token }: { token: string | null }) {
   const [copyOK, setCopyOK] = useState("");
   const [view, setView] = useState<ViewState>("idle");
 
-  const onDrop = useCallback((f: File[]) => {
-    setFiles(f);
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    // --- FIX: Append new files instead of replacing ---
+    setFiles(prevFiles => [...prevFiles, ...acceptedFiles]);
     setInputMode("upload");
   }, []);
+
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
@@ -706,16 +708,22 @@ function MainApp({ token }: { token: string | null }) {
                     {/* Code display area */}
                     <div className="flex-grow overflow-auto text-sm bg-code-editor rounded-md p-2">
                       {tokenSaver ? (
-                        // If tokenSaver and result contains "diffs" structure try to render appropriate diff
-                        (() => {
-                          const asObj = resultData as Record<string, string>;
-                          const oldVal = ""; // If backend returns old/new we would populate
-                          const newVal = activeFile ? (asObj[activeFile] || "") : (typeof resultData === "string" ? (resultData as string) : "");
-                          return <ReactDiffViewer oldValue={oldVal} newValue={newVal} splitView={false} useDarkTheme={true} styles={{ diffContainer: { background: "transparent" } }} />;
-                        })()
+                        <ReactDiffViewer 
+                          oldValue="" 
+                          newValue={activeFileContent || ""} 
+                          splitView={false} 
+                          useDarkTheme={true} 
+                          styles={{ diffContainer: { background: "transparent" } }} 
+                        />
                       ) : (
-                        <SyntaxHighlighter language="python" style={atomOneDark} customStyle={{ background: "transparent", padding: 8 }}>
-                          {activeFileContent || (typeof resultData === "string" ? (resultData as string) : "")}
+                        <SyntaxHighlighter 
+                          language="python" 
+                          style={atomOneDark} 
+                          customStyle={{ background: "transparent", padding: 0 }}
+                          wrapLines={true}
+                          wrapLongLines={true}
+                        >
+                          {activeFileContent || ""}
                         </SyntaxHighlighter>
                       )}
                     </div>

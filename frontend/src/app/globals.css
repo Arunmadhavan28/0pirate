@@ -105,6 +105,15 @@ body {
 }
 .results-card { height: 100%; display: flex; flex-direction: column; }
 
+
+/* -------------------- Code Display Fix -------------------- */
+.results-card pre,
+.results-card .syntax-highlighter {
+  white-space: pre-wrap !important; /* Ensures newlines are respected */
+  word-break: break-word;           /* Prevents long lines from overflowing */
+}
+
+
 /* -------------------- Code Input -------------------- */
 .code-input {
   width: 100%;

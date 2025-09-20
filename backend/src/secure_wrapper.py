@@ -13,6 +13,8 @@ import re
 import os
 import logging
 from typing import Dict, List, Any, Optional
+import difflib
+import traceback
 
 # -----------------------------------------------------
 # Local imports from our final, production-ready modules
@@ -142,9 +144,6 @@ def process_code_submission(
         # --- END: UPGRADED RESTORATION LOGIC ---
         
         repaired_files = restored_abstracted_files.copy()
-        # --- END: MODIFIED RESTORATION LOGIC ---
-
-        repaired_files = restored_abstracted_files.copy()
 
         # --- STEP 4: INTELLIGENT CORRECTION LOOP ---
         last_known_error = None
@@ -229,7 +228,7 @@ def process_code_submission(
                 diffs[path] = diff_text if diff_text else new_content
             output_result = diffs
         else:
-            output_result = {p: final_files.get(p) for p in sorted(repaired_files.keys())}
+            output_result = {p: final_files.get(p) for p in sorted(final_files.keys())}
             
         return {
             "result": output_result,
@@ -240,4 +239,13 @@ def process_code_submission(
 
     except Exception as e:
         logger.exception("An unhandled error occurred in the processing pipeline.")
-        return {"result": project_files, "notice": f"An unexpected error occurred: {e}", "analysis": "Processing failed due to a fatal error."}
+        # This now includes the specific error and traceback for easier debugging.
+        error_details = traceback.format_exc()
+        notice = f"An unexpected error occurred: {type(e).__name__}: {e}"
+        analysis = f"Processing failed due to a fatal error.\n\nDEBUG INFO:\n{error_details}"
+        
+        return {
+            "result": project_files, # Return the original files on a crash
+            "notice": notice,
+            "analysis": analysis,
+        }
