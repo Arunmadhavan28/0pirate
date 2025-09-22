@@ -100,62 +100,57 @@ async def check_tier_quota(user_id: str, tier: str):
 
 class ApiKeyRequest(BaseModel):
     provider: str
+    name: str  # NEW: Custom name for the key
     api_key: str
 
 class ApiKeyDeleteRequest(BaseModel):
-    provider: str
+    name: str  # CHANGED: We now delete by name
 
 @app.post("/api/keys")
 async def save_api_key(req: Request, body: ApiKeyRequest, user: dict = Depends(get_current_user)):
     user_id = user["id"]
-    provider_lower = body.provider.lower()
     try:
-        # Securely delete old key if it exists, using an RPC function
-        supabase.rpc("delete_user_api_key", { "p_user_id": user_id, "p_provider": provider_lower }).execute()
-
-        # Create new secret in the vault
-        resp = supabase.rpc("create_secret_wrapper", {
-            "new_secret": body.api_key,
-            "new_name": f"{user_id}_{provider_lower}_key_{uuid.uuid4()}",
+        # The Python server securely gets the user_id from the token and passes it to the RPC.
+        # THIS IS THE FIX: We are now correctly passing the p_user_id parameter.
+        supabase.rpc("upsert_user_api_key", {
+            "p_user_id": user_id,
+            "p_provider": body.provider.lower(),
+            "p_name": body.name,
+            "p_api_key": body.api_key
         }).execute()
 
-        secret_id = resp.data
-        if not secret_id:
-            raise Exception("Failed to create secret in vault.")
-
-        # Store the reference to the new secret
-        supabase.table("user_api_keys").insert({
-            "user_id": user_id,
-            "provider": provider_lower,
-            "encrypted_api_key_id": secret_id
-        }).execute()
-
-        return JSONResponse({"status": "ok", "provider": body.provider})
+        return JSONResponse({"status": "ok", "provider": body.provider, "name": body.name})
     except Exception as e:
         logger.error("Failed to save API key for user %s: %s", user_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to save key: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save key.")
+
 
 
 @app.delete("/api/keys")
 async def delete_api_key(req: Request, body: ApiKeyDeleteRequest, user: dict = Depends(get_current_user)):
     user_id = user["id"]
-    provider_lower = body.provider.lower()
     try:
+        # The Python server securely gets the user_id and passes it to the RPC.
         supabase.rpc("delete_user_api_key", {
             "p_user_id": user_id,
-            "p_provider": provider_lower
+            "p_key_name": body.name
         }).execute()
-        return JSONResponse({"status": "ok", "message": f"Key for {provider_lower} deleted."})
+        return JSONResponse({"status": "ok", "message": f"Key '{body.name}' deleted."})
     except Exception as e:
-        logger.error(f"Failed to delete API key for provider {provider_lower}: {e}")
+        logger.error(f"Failed to delete API key with name {body.name}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete key")
 
 @app.get("/api/keys")
 async def get_user_keys(user: dict = Depends(get_current_user)):
     user_id = user["id"]
-    resp = supabase.table("user_api_keys").select("provider").eq("user_id", user_id).execute()
-    providers = [item["provider"] for item in resp.data]
-    return JSONResponse({"providers": providers})
+    try:
+        # It must call the 'get_user_api_keys' RPC function
+        resp = supabase.rpc("get_user_api_keys", {"p_user_id": user_id}).execute()
+        return JSONResponse({"keys": resp.data or []})
+    except Exception as e:
+        logger.error(f"Could not retrieve keys for user {user_id}: {e}")
+        return JSONResponse({"keys": []})
+
 
 # -------------------------------------------
 # PROCESSING ENDPOINT (CORRECTED AND FINAL)
@@ -167,8 +162,8 @@ class ProcessRequestForm:
         error_log: Optional[str] = Form(None),
         provider: str = Form(...),
         model: Optional[str] = Form(None),
+        api_key_name: str = Form(...),  # NEW: User must specify which key to use
         token_saver_enabled: Optional[bool] = Form(False),
-        # --- ADD THESE NEW OPTIONAL PARAMETERS ---
         abstraction_enabled: Optional[bool] = Form(True),
         abstraction_level: Optional[str] = Form("paranoid"),
         abstraction_chunking: Optional[bool] = Form(False),
@@ -178,6 +173,7 @@ class ProcessRequestForm:
         self.error_log = error_log
         self.provider = provider
         self.model = model
+        self.api_key_name = api_key_name
         self.token_saver_enabled = token_saver_enabled
         self.abstraction_enabled = abstraction_enabled
         self.abstraction_level = abstraction_level
@@ -203,12 +199,20 @@ async def api_process_code(
     provider = form_data.provider.lower()
     if provider not in ["ollama", "auto", "qwen"]:
         try:
-            key_ref_resp = supabase.table("user_api_keys").select("encrypted_api_key_id").eq("user_id", user_id).eq("provider", provider).limit(1).single().execute()
+            # UPDATED LOGIC: Fetch the key by its custom name for the current user.
+            key_ref_resp = supabase.table("user_api_keys") \
+                .select("encrypted_api_key_id") \
+                .eq("user_id", user_id) \
+                .eq("name", form_data.api_key_name) \
+                .limit(1).single().execute()
+
             if not key_ref_resp.data:
-                raise HTTPException(status_code=400, detail=f"API key for provider '{provider}' not found.")
+                raise HTTPException(status_code=400, detail=f"API key named '{form_data.api_key_name}' not found.")
+            
             secret_id = key_ref_resp.data["encrypted_api_key_id"]
             decrypted_resp = supabase.rpc("reveal_secret", {"secret_id": secret_id}).execute()
             api_key = decrypted_resp.data
+
         except Exception as e:
             logger.error(f"Could not retrieve API key for user {user_id}: {e}")
             raise HTTPException(status_code=500, detail=f"Could not retrieve API key.")
@@ -243,6 +247,7 @@ async def api_process_code(
 
     job_id = str(uuid.uuid4())
     job_payload = {**form_data.__dict__, "project_files": project_files, "api_keys": {"api_key": api_key}}
+
 
     job_metadata = {
         "job_id": job_id,

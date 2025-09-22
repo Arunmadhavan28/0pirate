@@ -125,7 +125,6 @@ def process_code_submission(
 
         # --- STEP 3: RESTORE AND PREPARE FOR VALIDATION ---
         restored_abstracted_files = {}
-        # --- START: UPGRADED RESTORATION LOGIC ---
         # This logic is now robust to filename mismatches from the AI/parser.
         if len(modified_files) == 1 and len(abstraction_maps) == 1:
             # Handle the common single-file case, even if the AI changed the filename.
@@ -139,11 +138,12 @@ def process_code_submission(
                 if path in abstraction_maps:
                     restored_abstracted_files[path] = restore_abstracted(content, abstraction_maps[path])
                 else:
-                    # If a file wasn't abstracted, pass its content through directly.
                     restored_abstracted_files[path] = content
-        # --- END: UPGRADED RESTORATION LOGIC ---
         
         repaired_files = restored_abstracted_files.copy()
+        # --- END: UPGRADED RESTORATION LOGIC ---
+
+       
 
         # --- STEP 4: INTELLIGENT CORRECTION LOOP ---
         last_known_error = None
@@ -186,10 +186,9 @@ def process_code_submission(
             
             repaired_files = parsed_correction
 
-        # --- STEP 5: FINAL SANDBOX AND OUTPUT ---
+        # --- STEP 5: FINAL SANDBOX AND OUTPUT (WITH FINAL ERROR CHECK) ---
 
-        # --- START: THE MISSING SAFETY CHECK ---
-        # After the loop, if there is still a known error, the AI failed to fix it.
+        # This safety check runs AFTER the loop to handle total failure.
         if last_known_error:
             logger.error(f"AI failed to produce a valid fix after {MAX_CORRECTION_ATTEMPTS} attempts.")
             return {
@@ -198,9 +197,8 @@ def process_code_submission(
                 "notice": f"AI Correction Failed. The AI's suggested code was invalid and could not be fixed after {MAX_CORRECTION_ATTEMPTS} attempts. Last known error: {last_known_error}",
                 "sandbox_result": None,
             }
-        # --- END: THE MISSING SAFETY CHECK ---
 
-        # This is the success path, which only runs if the 'last_known_error' check passes.
+        # This is the SUCCESS PATH, which only runs if the error check above passes.
         final_files = {**project_files, **repaired_files}
         final_files = {p: restore_secrets(c, secret_maps.get(p, {})) for p, c in final_files.items()}
         
@@ -217,8 +215,9 @@ def process_code_submission(
         output_result: Dict[str, Any]
         if token_saver:
             diffs: Dict[str, str] = {}
-            for path, new_content in repaired_files.items():
+            for path in sorted(repaired_files.keys()):
                 original_content = project_files.get(path, "")
+                new_content = final_files.get(path, "")
                 diff_lines = difflib.unified_diff(
                     original_content.splitlines(keepends=True),
                     new_content.splitlines(keepends=True),
@@ -239,13 +238,7 @@ def process_code_submission(
 
     except Exception as e:
         logger.exception("An unhandled error occurred in the processing pipeline.")
-        # This now includes the specific error and traceback for easier debugging.
         error_details = traceback.format_exc()
         notice = f"An unexpected error occurred: {type(e).__name__}: {e}"
         analysis = f"Processing failed due to a fatal error.\n\nDEBUG INFO:\n{error_details}"
-        
-        return {
-            "result": project_files, # Return the original files on a crash
-            "notice": notice,
-            "analysis": analysis,
-        }
+        return { "result": project_files, "notice": notice, "analysis": analysis }
