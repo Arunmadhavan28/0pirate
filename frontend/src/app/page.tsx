@@ -101,10 +101,10 @@ const AuthComponent = () => { const [email, setEmail] = useState(""); const [pas
 const UpgradePrompt = () => ( <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="p-8 text-center"><h3 className="text-2xl font-bold mb-2">Daily limit reached</h3><p className="text-text-secondary mb-4">Upgrade to Pro for more jobs, priority processing and larger models.</p><div className="grid gap-2 mb-6"><div className="flex items-center gap-2"><ShieldCheck size={16} /> Unlimited "Max Security" jobs</div><div className="flex items-center gap-2"><ArrowUpCircle size={16} /> 10× daily jobs</div><div className="flex items-center gap-2"><Zap size={16} /> Priority processing</div></div><button className="btn btn-primary btn-laser" onClick={() => alert("Redirecting to pricing...")}>Upgrade to Pro</button></motion.div>);
 
 /* -------------------------------------------------
-   Account Manager - CORRECTED
+   Account Manager
 ---------------------------------------------------*/
-function AccountManager({ token, email, savedKeys, onKeysChange }: { 
-  token: string | null; 
+function AccountManager({ token, email, savedKeys, onKeysChange }: {
+  token: string | null;
   email: string | undefined;
   savedKeys: { name: string; provider: string }[];
   onKeysChange: () => void;
@@ -198,7 +198,7 @@ function AccountManager({ token, email, savedKeys, onKeysChange }: {
 }
 
 /* -------------------------------------------------
-   Main Application Component - CORRECTED
+   Main Application Component
 ---------------------------------------------------*/
 function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name: string; provider: string }[] }) {
   type ViewState = JobStatus;
@@ -273,7 +273,7 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
   const resultData = result?.result || {};
   const analysisText = result?.analysis || "";
   const activeFileContent = activeFile && typeof resultData === "object" ? (resultData as Record<string, string>)[activeFile] : (typeof resultData === "string" ? resultData : "");
-  
+
   return (
     <main className="layout-grid fade-in gap-8">
       <section className="flex flex-col gap-6">
@@ -296,13 +296,16 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
 }
 
 /* -------------------------------------------------
-   Top-level Home wrapper - CORRECTED
+   Top-level Home wrapper
 ---------------------------------------------------*/
 export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
+
+  // 1. Add new state to hold the user's subscription tier.
+  const [userTier, setUserTier] = useState<string | null>(null);
 
   const loadKeys = useCallback(async () => {
     if (!token) {
@@ -312,7 +315,7 @@ export default function Home() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/keys`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error("Could not fetch keys");
-      
+
       const data = await res.json();
       setSavedKeys(data.keys || []);
     } catch (e) {
@@ -321,6 +324,31 @@ export default function Home() {
     }
   }, [token]);
 
+  // 2. Add a function to load the user's profile and tier from Supabase.
+  const loadUserProfile = useCallback(async (userId: string) => {
+    if (!userId) return;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('tier')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error("Could not find or fetch user profile:", error.message);
+        setUserTier("free"); // Default to 'free' as per your backend logic
+        return;
+      }
+
+      if (data) {
+        setUserTier(data.tier || "free");
+      }
+    } catch (e) {
+      console.error("Failed to load user profile:", e);
+      setUserTier("free"); // Default on any other error
+    }
+  }, []);
+
   useEffect(() => {
     if (token) {
       loadKeys();
@@ -328,25 +356,45 @@ export default function Home() {
   }, [token, loadKeys]);
 
   useEffect(() => {
-    let mounted = true;
-    const init = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (!mounted) return;
-        setUser(data.session?.user ?? null);
-        setToken(data.session?.access_token ?? null);
-      } catch (e) { console.error("supabase getSession err", e); }
+    const handleAuthChange = async (session: any) => {
+        setUser(session?.user ?? null);
+        setToken(session?.access_token ?? null);
+
+        // 3. When the user session loads or changes, fetch their tier.
+        if (session?.user) {
+          await loadUserProfile(session.user.id);
+        } else {
+          setUserTier(null); // Clear the tier when the user logs out.
+        }
     };
-    init();
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setToken(session?.access_token ?? null);
+
+    // Handle the initial session load
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        handleAuthChange(session);
     });
+
+    // Listen for future auth changes (sign in, sign out)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        handleAuthChange(session);
+    });
+
     return () => {
-      mounted = false;
-      try { sub.subscription.unsubscribe(); } catch (_) { /* ignore */ }
+      subscription?.unsubscribe();
     };
-  }, []);
+  }, [loadUserProfile]);
+
+  // Helper function to determine badge style based on tier
+  const getTierBadgeProps = (tier: string | null) => {
+    const tierLower = tier?.toLowerCase();
+    switch (tierLower) {
+      case 'pro':
+        return { tone: 'info', children: 'Pro' };
+      case 'enterprise':
+        return { tone: 'success', children: 'Enterprise' };
+      default:
+        return { tone: 'default', children: 'Free' };
+    }
+  };
 
   return (
     <div className="app min-h-screen p-6">
@@ -382,23 +430,28 @@ export default function Home() {
                 <div className="flex justify-between items-center p-4 border-b border-border-color">
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold">Account</h3>
-                    <Badge tone="info">Pro</Badge>
+
+                    {/* 4. Dynamically render the badge based on the fetched tier */}
+                    {userTier && (
+                      <Badge {...getTierBadgeProps(userTier)} />
+                    )}
+
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => setPanelOpen(false)} className="btn btn-secondary btn-laser p-2"><X size={16} /></button>
                   </div>
                 </div>
 
-                <AccountManager 
-                  token={token} 
-                  email={user?.email} 
-                  savedKeys={savedKeys} 
-                  onKeysChange={loadKeys} 
+                <AccountManager
+                  token={token}
+                  email={user?.email}
+                  savedKeys={savedKeys}
+                  onKeysChange={loadKeys}
                 />
               </motion.div>
             )}
           </AnimatePresence>
-          
+
           <MainApp token={token} savedKeys={savedKeys} />
         </Fragment>
       )}
