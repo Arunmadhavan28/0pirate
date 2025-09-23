@@ -276,12 +276,12 @@ const AuthComponent = () => {
         <p className="text-center text-sm text-text-secondary mt-6">
           {isSignUp ? "Already have an account?" : "Don't have an account?"}
           <motion.button 
-            onClick={() => setIsSignUp(!isSignUp)} 
-            className="font-medium text-accent-primary hover:underline ml-2 transition-colors"
-            whileHover={{ scale: 1.05 }}
-          >
-            {isSignUp ? "Sign In" : "Sign Up"}
-          </motion.button>
+  onClick={() => setIsSignUp(!isSignUp)} 
+  className="btn btn-link text-accent-primary hover:text-accent-primary-hover ml-2 px-0 py-0 h-auto font-medium" // Added btn-link for theme blending
+  whileHover={{ scale: 1.05 }}
+>
+  {isSignUp ? "Sign In" : "Sign Up"}
+</motion.button>
         </p>
       </motion.div>
     </div>
@@ -1018,6 +1018,19 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
   const [view, setView] = useState<ViewState>("idle");
   const [selectedKeyName, setSelectedKeyName] = useState("");
 
+  const [inputMode, setInputMode] = useState<'paste' | 'upload'>('paste');
+  const [files, setFiles] = useState<File[]>([]);
+
+
+   // ADD THIS FUNCTION
+  const onDrop = useCallback((acceptedFiles: File[]) => { 
+    setFiles(prevFiles => [...prevFiles, ...acceptedFiles]); 
+    setInputMode("upload"); 
+  }, []);
+
+  // AND ADD THIS HOOK CALL
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+
   const success = useCallback((d: any) => {
     let resultData = d.result || {};
     let firstFileName = null;
@@ -1148,32 +1161,74 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
         >
           {/* Code Input Section */}
           <motion.div 
-            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
             variants={fadeInUp}
           >
-            <div className="code-wrapper group">
-               <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
-                 <Code size={16} />
-                 Buggy Code
-               </h4>
-               <textarea 
-                 className="code-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
-                 placeholder="Paste your buggy code here..." 
-                 value={pastedCode} 
-                 onChange={(e) => setPastedCode(e.target.value)} 
-               />
+            <div className="flex gap-2 mb-4">
+                <motion.button 
+                    onClick={() => setInputMode('paste')}
+                    className={`btn flex-1 ${inputMode === 'paste' ? 'btn-primary' : 'btn-secondary'}`}
+                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                >
+                    Paste Code
+                </motion.button>
+                <motion.button 
+                    onClick={() => setInputMode('upload')}
+                    className={`btn flex-1 ${inputMode === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
+                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                >
+                    Upload Files / ZIP
+                </motion.button>
             </div>
-            <div className="code-wrapper group">
-               <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
-                 <Terminal size={16} />
-                 Terminal Log
-               </h4>
-               <textarea 
-                 className="terminal-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
-                 placeholder="Paste terminal output, stack traces, errors here..." 
-                 value={errorLog} 
-                 onChange={(e) => setErrorLog(e.target.value)} 
-               />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Conditional Rendering for Paste vs Upload */}
+              {inputMode === 'paste' ? (
+                <div className="code-wrapper group lg:col-span-2">
+                   <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
+                     <Clipboard size={16} />
+                     Paste Your Code
+                   </h4>
+                   <textarea 
+                     className="code-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
+                     placeholder="Paste your buggy code here..." 
+                     value={pastedCode} 
+                     onChange={(e) => setPastedCode(e.target.value)} 
+                   />
+                </div>
+              ) : (
+                <div 
+                    {...getRootProps()} 
+                    className={`code-wrapper group flex flex-col items-center justify-center text-center border-dashed border-2 hover:border-accent-primary transition-all cursor-pointer ${isDragActive ? 'border-accent-primary' : 'border-border-primary'}`}
+                >
+                    <input {...getInputProps()} />
+                    <Bot size={32} className="text-text-secondary mb-4" />
+                    <p className="font-semibold">{isDragActive ? "Drop files now..." : "Drag & drop files or a .zip here"}</p>
+                    <p className="text-sm text-text-secondary">or click to select files</p>
+                    {files.length > 0 && (
+                        <div className="mt-4 text-left w-full">
+                            <h5 className="font-semibold text-xs uppercase text-text-secondary">Selected Files:</h5>
+                            <ul className="text-sm space-y-1 mt-2">
+                                {files.map(file => (
+                                    <li key={file.name} className="truncate">- {file.name}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+              )}
+
+              <div className="code-wrapper group lg:col-start-2">
+                 <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
+                   <Terminal size={16} />
+                   Terminal Log
+                 </h4>
+                 <textarea 
+                   className="terminal-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
+                   placeholder="Paste terminal output, stack traces, errors here..." 
+                   value={errorLog} 
+                   onChange={(e) => setErrorLog(e.target.value)} 
+                 />
+              </div>
             </div>
           </motion.div>
 
@@ -1372,7 +1427,7 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
                           <Bot size={20} className="text-accent-primary" /> 
                           AI Analysis
                         </h3>
-                        <div className="bg-background-light/50 p-4 rounded-lg border border-border-primary">
+                        <div className="bg-background-light/50 p-4 rounded-lg border border-border-primary max-h-48 overflow-y-auto">
                           <pre className="whitespace-pre-wrap text-sm text-text-secondary leading-relaxed font-sans">
                             {result.analysis}
                           </pre>
@@ -1405,19 +1460,28 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
                            )}
                          </motion.button>
                       </div>
-                       
+
+                      {/* NEW: File Navigator Tabs */}
+                      {typeof resultData === 'object' && Object.keys(resultData).length > 1 && (
+                        <div className="flex gap-2 mb-3 border-b border-border-primary pb-2 flex-wrap">
+                          {Object.keys(resultData).map(filename => (
+                            <button
+                              key={filename}
+                              onClick={() => setActiveFile(filename)}
+                              className={`btn btn-secondary text-xs px-3 py-1 ${activeFile === filename ? 'bg-accent-primary text-white border-accent-primary' : ''}`}
+                            >
+                              {filename}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <div className="code-output-wrapper flex-grow rounded-lg bg-code-editor border border-border-primary p-4 overflow-auto">
                         <SyntaxHighlighter 
-                          language="python" 
+                          language="python" // You can make this dynamic if you handle multiple languages
                           style={atomOneDark} 
                           wrapLines={true} 
                           wrapLongLines={true}
-                          customStyle={{
-                            background: 'transparent',
-                            padding: 0,
-                            margin: 0,
-                            fontSize: '14px'
-                          }}
+                          customStyle={{ background: 'transparent', padding: 0, margin: 0, fontSize: '14px' }}
                         >
                           {activeFileContent || result.notice || "No code returned."}
                         </SyntaxHighlighter>

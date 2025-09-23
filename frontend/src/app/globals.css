@@ -425,3 +425,21 @@ fieldset {
   padding: 0;
   margin: 0;
 }
+
+.btn-link {
+  background: none;
+  border-color: transparent;
+  padding: 0;
+  height: auto;
+  box-shadow: none;
+  transform: none; /* Override hover/active transforms from .btn */
+  color: var(--text-secondary); /* Set a default, less prominent color */
+  font-weight: 500;
+}
+
+.btn-link:hover {
+  background: none;
+  border-color: transparent;
+  color: var(--accent-primary); /* Change to accent color on hover */
+  text-decoration: underline;  /* Add underline on hover */
+}
