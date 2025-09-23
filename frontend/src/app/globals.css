@@ -166,13 +166,45 @@ body {
 .toggle-switch-info { flex-grow: 1; }
 .toggle-switch-info h5 { margin: 0; font-size: 0.9rem; font-weight: 500; color: var(--text-primary); }
 .toggle-switch-info p { margin: 0.1rem 0 0; font-size: 0.8rem; color: var(--text-secondary); }
-.switch { position: relative; display: inline-block; width: 40px; height: 22px; }
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--background-light); border-radius: 22px; transition: 0.3s; }
-.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: white; border-radius: 50%; transition: 0.3s; }
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0; /* Prevents it from shrinking in a flex container */
+}
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--background-light);
+  border-radius: 28px;
+  transition: background-color 0.3s ease;
+  border: 1px solid var(--border-primary);
+}
 .switch input:checked + .slider { background-color: var(--accent-primary); }
-.switch input:checked + .slider:before { transform: translateX(18px); }
+
 .animated-icon { transition: transform 0.3s ease, color 0.3s ease; }
+
+.slider-thumb {
+  position: absolute;
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  display: block; /* Ensures it's treated as a block-level element */
+}
 
 .slider::after {
   content: '';
@@ -443,3 +475,59 @@ fieldset {
   color: var(--accent-primary); /* Change to accent color on hover */
   text-decoration: underline;  /* Add underline on hover */
 }
+
+.toggle-details {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 0.75rem 0.5rem 0.25rem;
+  border-top: 1px solid var(--border-secondary);
+  margin-top: 0.75rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.laser-scan {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, transparent, var(--accent-primary), transparent);
+  filter: blur(1px);
+}
+
+/* In globals.css, add these new styles */
+
+.toggle-card-enhanced {
+  background-color: var(--background-light);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition: all 0.3s ease;
+}
+
+/* Styles for when the toggle is ON */
+.toggle-card-enhanced[data-active="true"] {
+  background-color: var(--background-deep);
+  box-shadow: var(--shadow-md);
+}
+.toggle-card-enhanced[data-accent="green"][data-active="true"] {
+  border-color: var(--success-color);
+}
+.toggle-card-enhanced[data-accent="blue"][data-active="true"] {
+  border-color: var(--accent-primary);
+}
+
+.toggle-active-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-top: 1rem;
+}
+.toggle-active-info--green { color: var(--success-color); }
+.toggle-active-info--blue { color: var(--accent-primary); }
+
+/* In globals.css */
+

@@ -938,63 +938,72 @@ function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTi
 }
 
 /* -------------------------------------------------
-   Enhanced Animated Toggle Switch Component
+   FINAL PROFESSIONAL TOGGLE SWITCH COMPONENT
 ---------------------------------------------------*/
-function ToggleSwitch({ label, description, checked, onChange, icon: Icon }: {
+function ToggleSwitch({
+  label,
+  description,
+  activeInfo,
+  accentColor,
+  checked,
+  onChange,
+  icon: Icon
+}: {
   label: string;
   description: string;
+  activeInfo: string;
+  accentColor: 'green' | 'blue';
   checked: boolean;
   onChange: (checked: boolean) => void;
   icon?: React.ElementType;
 }) {
   return (
-    <motion.label 
-      className="toggle-switch-label group cursor-pointer"
-      whileHover={{ scale: 1.01 }}
-      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+    <div
+      className="toggle-card-enhanced"
+      data-active={checked}
+      data-accent={accentColor}
     >
-      {Icon && (
-        <motion.div
-          className="mr-4 flex-shrink-0"
-          animate={{
-            scale: checked ? 1.15 : 1,
-            color: checked ? 'var(--accent-primary)' : 'var(--text-secondary)'
-          }}
-          transition={{ type: 'spring', stiffness: 400, damping: 15 }}
-        >
-          <Icon size={22} className="animated-icon" />
-        </motion.div>
-      )}
-      
-      <div className="toggle-switch-info flex-grow">
-        <h5 className="group-hover:text-accent-primary transition-colors">{label}</h5>
-        <p className="group-hover:text-text-primary transition-colors">{description}</p>
-      </div>
-      
-      <div className="switch relative">
-        <input 
-          type="checkbox" 
-          checked={checked} 
-          onChange={(e) => onChange(e.target.checked)}
-          className="sr-only"
-        />
-        <motion.span 
-          className="slider"
-          animate={{
-            backgroundColor: checked ? 'var(--accent-primary)' : 'var(--background-light)'
-          }}
-          transition={{ duration: 0.2 }}
-        >
-          <motion.span
-            className="slider-thumb"
-            animate={{
-              x: checked ? 18 : 3
-            }}
-            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      <div className="flex justify-between items-start">
+        <div className="toggle-switch-info flex-grow">
+          <h5 className={`font-semibold ${checked && (accentColor === 'green' ? 'text-green-400' : 'text-blue-400')}`}>
+            {label}
+          </h5>
+          <p className="text-sm text-text-secondary">{description}</p>
+        </div>
+        <div className="switch relative ml-4">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(e) => onChange(e.target.checked)}
+            className="sr-only" // This hides the ugly default checkbox
           />
-        </motion.span>
+          <motion.div
+  className="slider"
+  onClick={() => onChange(!checked)}
+  animate={{ backgroundColor: checked ? (accentColor === 'green' ? 'var(--success-color)' : 'var(--accent-primary)') : 'var(--background-light)' }}
+>
+  <motion.span
+    className="slider-thumb"
+    animate={{ x: checked ? 18 : 0 }}
+    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+  />
+</motion.div>
+        </div>
       </div>
-    </motion.label>
+      <AnimatePresence>
+        {checked && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, marginTop: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginTop: '1rem' }}
+            exit={{ opacity: 0, height: 0, marginTop: 0 }}
+          >
+            <p className={`toggle-active-info ${accentColor === 'green' ? 'toggle-active-info--green' : 'toggle-active-info--blue'}`}>
+              {Icon && <Icon size={16} />} {activeInfo}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -1020,6 +1029,49 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
 
   const [inputMode, setInputMode] = useState<'paste' | 'upload'>('paste');
   const [files, setFiles] = useState<File[]>([]);
+
+  const getLanguageFromFileName = (filename: string | null): string => {
+  if (!filename) return 'plaintext';
+  
+  const extension = filename.split('.').pop()?.toLowerCase();
+
+  switch (extension) {
+    case 'js':
+    case 'jsx':
+      return 'javascript';
+    case 'ts':
+    case 'tsx':
+      return 'typescript';
+    case 'py':
+      return 'python';
+    case 'css':
+      return 'css';
+    case 'html':
+      return 'html';
+    case 'json':
+      return 'json';
+    case 'md':
+      return 'markdown';
+    case 'sh':
+    case 'bash':
+      return 'bash';
+    case 'java':
+      return 'java';
+    case 'cpp':
+      return 'cpp';
+    case 'c':
+      return 'c';
+    case 'go':
+      return 'go';
+    case 'rb':
+        return 'ruby';
+    default:
+      return 'plaintext';
+  }
+};
+
+
+  const language = getLanguageFromFileName(activeFile);
 
 
    // ADD THIS FUNCTION
@@ -1308,57 +1360,66 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
             className="card space-y-4"
             variants={fadeInUp}
           >
+             <h4 className="flex items-center gap-3 font-semibold text-text-primary">
+                <ShieldCheck size={18}/> Privacy & Security
+             </h4>
              <ToggleSwitch 
-               label="Max Security (Abstraction)" 
-               description="Abstracts code for maximum privacy before sending to the LLM" 
+               label="Max Security" 
+               description="Zero-knowledge processing." 
+               activeInfo="Secure mode activated - All data is abstracted."
+               accentColor="green"
                checked={maxSecurity} 
                onChange={setMaxSecurity} 
                icon={ShieldCheck} 
              />
              <ToggleSwitch 
-               label="Token Saver (Diff Output)" 
-               description="Show compact diffs instead of full files to save tokens" 
+               label="Token Saver (DIFF)" 
+               description="Output changes only." 
+               activeInfo="Optimizing token usage for efficiency."
+               accentColor="blue"
                checked={tokenSaver} 
                onChange={setTokenSaver} 
-               icon={FileText} 
+               icon={Zap} 
              />
           </motion.div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons - DEFINITIVE FIX */}
           <motion.div 
-            className="flex gap-4"
-            variants={fadeInUp}
-          >
-              <motion.button 
-                onClick={submit} 
-                disabled={view === "loading"} 
-                className={`btn btn-primary flex-1 ${view === "loading" ? "btn-loading" : ""}`}
-                whileHover={{ scale: view === "loading" ? 1 : 1.02 }}
-                whileTap={{ scale: view === "loading" ? 1 : 0.98 }}
-              >
-                {view === "loading" ? (
-                  <div className="flex items-center gap-2">
-                    <LoadingSpinner size={16} />
-                    Running Analysis...
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Zap size={16} />
-                    Run Analysis
-                  </div>
-                )}
-              </motion.button>
-              
-              <motion.button 
-                onClick={resetAll} 
-                className="btn btn-secondary px-6"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                <X size={16} />
-                Reset
-              </motion.button>
-          </motion.div>
+  className="grid grid-cols-2 gap-4"
+  variants={fadeInUp}
+>
+    {/* Button 1: Run Analysis */}
+    <motion.button 
+      onClick={submit} 
+      disabled={view === "loading"} 
+      className={`btn btn-primary w-full ${view === "loading" ? "btn-loading" : ""}`}
+      whileHover={{ scale: view === "loading" ? 1 : 1.02 }}
+      whileTap={{ scale: view === "loading" ? 1 : 0.98 }}
+    >
+      {view === "loading" ? (
+        <>
+          <LoadingSpinner size={16} />
+          Running Analysis...
+        </>
+      ) : (
+        <>
+          <Zap size={16} />
+          Run Analysis
+        </>
+      )}
+    </motion.button>
+    
+    {/* Button 2: Reset */}
+    <motion.button 
+      onClick={resetAll} 
+      className="btn btn-secondary w-full"
+      whileHover={{ scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+    >
+      <X size={16} />
+      Reset
+    </motion.button>
+</motion.div>
         </motion.div>
       </div>
       
@@ -1477,7 +1538,7 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
                       )}
                       <div className="code-output-wrapper flex-grow rounded-lg bg-code-editor border border-border-primary p-4 overflow-auto">
                         <SyntaxHighlighter 
-                          language="python" // You can make this dynamic if you handle multiple languages
+                          language={language}  // You can make this dynamic if you handle multiple languages
                           style={atomOneDark} 
                           wrapLines={true} 
                           wrapLongLines={true}
