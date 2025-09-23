@@ -5,35 +5,12 @@ import { createClient } from "@supabase/supabase-js";
 import { useDropzone } from "react-dropzone";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  User,
-  Settings,
-  UploadCloud,
-  FileText,
-  Bot,
-  Terminal,
-  Clipboard,
-  ClipboardCheck,
-  LogOut,
-  Github,
-  Mail,
-  KeyRound,
-  Trash2,
-  X,
-  Zap,
-  ShieldCheck,
-  ArrowUpCircle,
-  AlertTriangle,
-  CheckCircle2,
-  ArrowRight,
-  Info,
-  Cpu,
-  Download
+  User, Bot, Terminal, Clipboard, ClipboardCheck, LogOut, Github, Mail, KeyRound,
+  Trash2, X, ShieldCheck, FileText, Zap, HelpCircle, Code, Settings, Edit, ChevronLeft, Loader2
 } from "lucide-react";
 
-// --- Syntax + Diff viewer imports ---
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
-import ReactDiffViewer from "react-diff-viewer-continued";
 
 /* -------------------------------------------------
    Configuration
@@ -43,7 +20,6 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-/* Supported provider -> model list */
 const MODEL_OPTIONS: Record<string, string[]> = {
   auto: ["(auto-select)"],
   openai: ["gpt-4o-mini", "gpt-4o"],
@@ -59,10 +35,30 @@ const MODEL_OPTIONS: Record<string, string[]> = {
    Utilities & Types
 ---------------------------------------------------*/
 type JobStatus = "idle" | "loading" | "result" | "error" | "upgrade";
-type ReportFinding = { file?: string; line?: number; message: string; severity?: string; };
-type Report = { overall?: any; summary?: any; findings?: ReportFinding[]; status?: string; errors?: number; warnings?: number; };
-type ResultShape = { result?: Record<string, string> | string; analysis?: string; validator_report?: Report; sandbox_result?: Report; notice?: string; job_id?: string; [key: string]: any; };
-const short = (s: string | undefined, n = 40) => { if (!s) return ""; if (s.length <= n) return s; return s.slice(0, n - 1) + "…"; };
+type ResultShape = { result?: Record<string, string> | string; analysis?: string; notice?: string; job_id?: string; };
+
+/* -------------------------------------------------
+   Enhanced Animation Variants
+---------------------------------------------------*/
+const fadeInUp = {
+  initial: { opacity: 0, y: 20 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -20 }
+};
+
+const staggerContainer = {
+  animate: {
+    transition: {
+      staggerChildren: 0.1
+    }
+  }
+};
+
+const scaleIn = {
+  initial: { opacity: 0, scale: 0.95 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.95 }
+};
 
 /* -------------------------------------------------
    Polling Hook
@@ -77,7 +73,7 @@ function useJobPolling(jobId: string | null, token: string | null, onResult: (da
         const steps = ["Redacting secrets…", "Abstracting code…", "Building AI prompt…", "Calling LLM…", "Parsing response…", "Validating fix…", "Running sandbox…", "Finalizing…"];
         const poll = async () => {
             if (cancelled) return;
-            setStatus(`[ ${steps[stepIndex++ % steps.length]} ]`);
+            setStatus(`${steps[stepIndex++ % steps.length]}`);
             try {
                 const currentToken = tokenRef.current;
                 if (!currentToken) throw new Error("Authentication token is missing.");
@@ -92,205 +88,1346 @@ function useJobPolling(jobId: string | null, token: string | null, onResult: (da
     }, [jobId, onResult, onError, setStatus]);
 }
 
+function useCursorGlow(ref: React.RefObject<HTMLElement>) {
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      ref.current.style.setProperty('--mouse-x', `${x}px`);
+      ref.current.style.setProperty('--mouse-y', `${y}px`);
+    }
+  }, [ref]);
+
+  return { onMouseMove: handleMouseMove };
+}
 /* -------------------------------------------------
    Small Components
 ---------------------------------------------------*/
-const Badge = ({ children, tone = "default" }: { children: React.ReactNode; tone?: "default" | "success" | "warn" | "info" }) => { const cls = tone === "success" ? "px-2 py-1 rounded bg-green-600 text-white text-xs" : tone === "warn" ? "px-2 py-1 rounded bg-amber-500 text-black text-xs" : tone === "info" ? "px-2 py-1 rounded bg-blue-600 text-white text-xs" : "px-2 py-1 rounded bg-gray-200 text-black text-xs"; return <span className={cls}>{children}</span>; };
-const ReportCard = ({ title, report }: { title: string; report: Report | undefined | null }) => { if (!report) return null; const summary = report.overall || report.summary || report; const status = summary?.status || (summary?.errors > 0 ? "error" : "ok"); const isSuccess = status === "success" || status === "ok"; const findings = report.findings || []; return (<motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="card p-3 bg-background-light border-border-color mt-4"><details><summary className="font-bold flex items-center gap-2 cursor-pointer">{isSuccess ? <CheckCircle2 className="text-green-500" size={16} /> : <AlertTriangle className="text-amber-400" size={16} />}{title} Report:<span className={`ml-2 capitalize ${isSuccess ? "text-green-600" : "text-amber-500"}`}>{status}</span><span className="text-xs text-text-secondary ml-auto">({summary?.errors || 0} Errors, {summary?.warnings || 0} Warnings)</span></summary><div className="mt-3 pl-3 border-l-2 border-border-secondary text-xs space-y-2 max-h-44 overflow-y-auto">{findings.length > 0 ? (findings.map((f: ReportFinding, i: number) => (<div key={i} className="mb-2"><p className="font-semibold text-sm">{f.file ? `${f.file}${f.line ? `:${f.line}` : ""}` : "General"} - <span className="capitalize">{f.severity || "info"}</span></p><p className="text-text-secondary text-sm">{f.message}</p></div>))) : (<p className="text-text-secondary text-sm">No findings to report.</p>)}</div></details></motion.div>); };
-const AuthComponent = () => { const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [isSignUp, setIsSignUp] = useState(false); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(false); const handleAuth = async (e?: React.FormEvent) => { if (e) e.preventDefault(); setError(null); setLoading(true); try { if (isSignUp) { const { error } = await supabase.auth.signUp({ email, password }); if (error) setError(error.message); } else { const { error } = await supabase.auth.signInWithPassword({ email, password }); if (error) setError(error.message); } } catch (err: any) { setError(err?.message || "An unexpected error occurred."); } finally { setLoading(false); } }; const oauth = async (provider: "github" | "google") => { setError(null); try { const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } }); if (error) setError(error.message); } catch (e: any) { setError(e.message || "OAuth failed."); } }; return (<motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="card max-w-lg mx-auto p-8"><h2 className="text-2xl font-bold mb-3 text-center">{isSignUp ? "Create an account" : "Sign in"}</h2><form onSubmit={handleAuth} className="flex flex-col gap-3"><input className="input-base" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required /><input className="input-base" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required /><div className="flex gap-2"><button type="submit" disabled={loading} className="btn btn-primary btn-laser flex-1">{isSignUp ? "Sign up" : "Sign in"}</button><button type="button" onClick={() => { setIsSignUp((s) => !s); }} className="btn btn-secondary btn-laser">{isSignUp ? "Have account?" : "Create account"}</button></div></form>{error && <p className="text-accent-destructive mt-3">{error}</p>}<div className="my-4 text-center">— Or continue with —</div><div className="flex gap-3"><button onClick={() => oauth("github")} className="btn btn-secondary flex-1 flex items-center justify-center gap-2"><Github size={16} /> GitHub</button><button onClick={() => oauth("google")} className="btn btn-secondary flex-1 flex items-center justify-center gap-2"><Mail size={16} /> Google</button></div></motion.div>); };
-const UpgradePrompt = () => ( <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="p-8 text-center"><h3 className="text-2xl font-bold mb-2">Daily limit reached</h3><p className="text-text-secondary mb-4">Upgrade to Pro for more jobs, priority processing and larger models.</p><div className="grid gap-2 mb-6"><div className="flex items-center gap-2"><ShieldCheck size={16} /> Unlimited "Max Security" jobs</div><div className="flex items-center gap-2"><ArrowUpCircle size={16} /> 10× daily jobs</div><div className="flex items-center gap-2"><Zap size={16} /> Priority processing</div></div><button className="btn btn-primary btn-laser" onClick={() => alert("Redirecting to pricing...")}>Upgrade to Pro</button></motion.div>);
+const Badge = ({ children, tone = "default" }: { children: React.ReactNode; tone?: string }) => { 
+    const cls = tone === "success" 
+        ? "inline-flex items-center px-3 py-1 rounded-full bg-emerald-600/20 border border-emerald-600/30 text-emerald-300 text-xs font-medium" 
+        : tone === "warn" 
+        ? "inline-flex items-center px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-medium" 
+        : tone === "info" 
+        ? "inline-flex items-center px-3 py-1 rounded-full bg-blue-600/20 border border-blue-600/30 text-blue-300 text-xs font-medium" 
+        : "inline-flex items-center px-3 py-1 rounded-full bg-gray-500/20 border border-gray-500/30 text-gray-300 text-xs font-medium"; 
+    return <span className={cls}>{children}</span>; 
+};
 
 /* -------------------------------------------------
-   Account Manager
+   Enhanced Loading Spinner
 ---------------------------------------------------*/
-function AccountManager({ token, email, savedKeys, onKeysChange }: {
-  token: string | null;
-  email: string | undefined;
-  savedKeys: { name: string; provider: string }[];
-  onKeysChange: () => void;
-}) {
-  const [provider, setProvider] = useState("gemini");
-  const [apiKey, setApiKey] = useState("");
-  const [keyName, setKeyName] = useState("");
-  const [message, setMessage] = useState<string | null>(null);
+const LoadingSpinner = ({ size = 20, className = "" }: { size?: number; className?: string }) => (
+  <motion.div
+    className={`inline-block ${className}`}
+    animate={{ rotate: 360 }}
+    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+  >
+    <Loader2 size={size} />
+  </motion.div>
+);
 
-  const save = async () => {
-    if (!token || !apiKey) {
-      setMessage("Please provide a non-empty API key.");
-      return;
-    }
-    const nameToSend = keyName.trim() || provider;
+/* -------------------------------------------------
+   Redesigned Auth Component
+---------------------------------------------------*/
+const AuthComponent = () => {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/keys`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ provider, name: nameToSend, api_key: apiKey }),
-      });
-      if (res.ok) {
-        setMessage(`Saved key: ${nameToSend}`);
-        setApiKey("");
-        setKeyName("");
-        onKeysChange();
-      } else {
-        const errData = await res.json();
-        setMessage(`Failed to save key: ${errData.detail || "Unknown error"}`);
-      }
-    } catch (e) {
-      console.error("save err", e);
-      setMessage("Error saving key");
+      const authMethod = isSignUp ? supabase.auth.signUp : supabase.auth.signInWithPassword;
+      const { error } = await authMethod({ email, password });
+      if (error) setError(error.message);
+    } catch (err: any) {
+      setError(err?.message || "An unexpected error occurred.");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const remove = async (nameToDelete: string) => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/keys`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ name: nameToDelete }),
-      });
-      if (res.ok) {
-        setMessage(`Deleted key: ${nameToDelete}`);
-        onKeysChange();
-      } else {
-        setMessage("Failed to delete key.");
-      }
-    } catch (e) {
-      console.error("delete err", e);
-      setMessage("Error deleting key");
-    }
+  const oauth = async (provider: "github" | "google") => {
+    setError(null);
+    const { error } = await supabase.auth.signInWithOAuth({ 
+      provider, 
+      options: { redirectTo: window.location.origin } 
+    });
+    if (error) setError(error.message);
   };
 
   return (
-    <div className="p-6 space-y-4">
-      <p className="text-sm">Logged in as <span className="font-semibold">{email}</span></p>
-      <div className="card p-4 space-y-3">
-        <h3 className="flex items-center gap-2"><KeyRound size={16} /> Manage API Keys</h3>
-        <input className="input-base" type="text" placeholder="Key name (e.g., 'Personal Gemini Key')" value={keyName} onChange={(e) => setKeyName(e.target.value)} />
-        <select className="input-base" value={provider} onChange={(e) => setProvider(e.target.value)}>
-          {Object.keys(MODEL_OPTIONS).filter((p) => !["auto", "ollama"].includes(p)).map((p) => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <input className="input-base" type="password" placeholder="API key" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-        <div className="flex gap-2"><button onClick={save} className="btn btn-primary btn-laser flex-1">Save Key</button></div>
-        {message && <p className="text-sm">{message}</p>}
-        <div className="text-xs text-text-secondary p-2 bg-background-light rounded border border-border-color">
-          <strong>Tip:</strong> Give your keys a custom name. If you leave it blank, it will default to the provider's name (e.g., "gemini").
-        </div>
-      </div>
-      <div className="card p-4">
-        <h4 className="font-semibold">Saved Keys</h4>
-        {savedKeys.length === 0 ? <p className="text-sm text-text-secondary mt-2">No saved keys.</p> : (
-          <div className="space-y-1 mt-2">
-            {savedKeys.map((key) => (
-              <div key={key.name} className="flex justify-between items-center bg-background-light p-2 rounded">
-                <span className="truncate font-mono text-sm">{key.name} <span className="text-text-secondary">({key.provider})</span></span>
-                <button onClick={() => remove(key.name)} className="btn btn-secondary btn-laser text-accent-destructive p-1"><Trash2 size={16} /></button>
+    <div className="auth-container">
+      <motion.div 
+        className="auth-header"
+        variants={fadeInUp}
+        initial="initial"
+        animate="animate"
+        transition={{ duration: 0.6 }}
+      >
+        <h1 className="flex items-center justify-center gap-3 text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+          <Bot size={40} className="text-blue-400" /> 0Pirate
+        </h1>
+        <p className="text-text-secondary mt-3 text-lg">
+          {isSignUp ? "Create your account to get started" : "Welcome back to the future of code"}
+        </p>
+      </motion.div>
+      
+      <motion.div 
+        className="card auth-card"
+        variants={scaleIn}
+        initial="initial"
+        animate="animate"
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
+        <motion.div 
+          className="auth-social-buttons"
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+        >
+          <motion.button 
+            onClick={() => oauth("github")} 
+            className="btn btn-secondary auth-social-button group"
+            variants={fadeInUp}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Github size={18} className="group-hover:scale-110 transition-transform" /> 
+            Continue with GitHub
+          </motion.button>
+          <motion.button 
+            onClick={() => oauth("google")} 
+            className="btn btn-secondary auth-social-button group"
+            variants={fadeInUp}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <Mail size={18} className="group-hover:scale-110 transition-transform" /> 
+            Continue with Google
+          </motion.button>
+        </motion.div>
+        
+        <div className="auth-divider">or continue with email</div>
+        
+        <form onSubmit={handleAuth} className="flex flex-col gap-4">
+          <motion.input 
+            className="input-base focus:ring-2 focus:ring-blue-500/30 transition-all" 
+            type="email" 
+            placeholder="Enter your email address" 
+            value={email} 
+            onChange={(e) => setEmail(e.target.value)} 
+            required 
+            variants={fadeInUp}
+            initial="initial"
+            animate="animate"
+          />
+          <motion.input 
+            className="input-base focus:ring-2 focus:ring-blue-500/30 transition-all" 
+            type="password" 
+            placeholder="Enter your password" 
+            value={password} 
+            onChange={(e) => setPassword(e.target.value)} 
+            required 
+            variants={fadeInUp}
+            initial="initial"
+            animate="animate"
+          />
+          <motion.button 
+            type="submit" 
+            disabled={loading} 
+            className="btn btn-primary w-full relative overflow-hidden"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            variants={fadeInUp}
+            initial="initial"
+            animate="animate"
+          >
+            {loading ? (
+              <div className="flex items-center justify-center gap-2">
+                <LoadingSpinner size={16} />
+                Processing...
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <button onClick={() => supabase.auth.signOut()} className="btn btn-secondary btn-laser bg-accent-destructive text-white w-full flex items-center justify-center gap-2">
-        <LogOut size={16} /> Sign out
-      </button>
+            ) : (
+              isSignUp ? "Create Account" : "Sign In"
+            )}
+          </motion.button>
+        </form>
+        
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              <p className="text-red-400 text-sm text-center">{error}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        <p className="text-center text-sm text-text-secondary mt-6">
+          {isSignUp ? "Already have an account?" : "Don't have an account?"}
+          <motion.button 
+            onClick={() => setIsSignUp(!isSignUp)} 
+            className="font-medium text-accent-primary hover:underline ml-2 transition-colors"
+            whileHover={{ scale: 1.05 }}
+          >
+            {isSignUp ? "Sign In" : "Sign Up"}
+          </motion.button>
+        </p>
+      </motion.div>
     </div>
+  );
+};
+
+/* -------------------------------------------------
+   Enhanced Claude-style Onboarding View
+---------------------------------------------------*/
+const OnboardingIdleView = () => {
+  const card1Ref = useRef<HTMLDivElement>(null);
+  const card2Ref = useRef<HTMLDivElement>(null);
+  const card3Ref = useRef<HTMLDivElement>(null);
+  const card4Ref = useRef<HTMLDivElement>(null);
+
+  const glow1 = useCursorGlow(card1Ref);
+  const glow2 = useCursorGlow(card2Ref);
+  const glow3 = useCursorGlow(card3Ref);
+  const glow4 = useCursorGlow(card4Ref);
+  
+  return (
+    <motion.div 
+      key="idle" 
+      className="onboarding-view"
+      variants={fadeInUp}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+      <motion.div
+        animate={{ 
+          scale: [1, 1.1, 1],
+          rotate: [0, 5, -5, 0]
+        }}
+        transition={{ 
+          duration: 4,
+          repeat: Infinity,
+          ease: "easeInOut"
+        }}
+      >
+        <Bot size={48} className="text-accent-primary" />
+      </motion.div>
+      
+      <motion.h2
+        className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+      >
+        Welcome to 0Pirate
+      </motion.h2>
+      
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.4 }}
+      >
+        Your AI partner for securing and refactoring code. Provide your code and terminal logs, then choose a task to begin.
+      </motion.p>
+      
+      <motion.div 
+        className="capability-cards"
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+      >
+        <motion.div 
+          ref={card1Ref} 
+          className="capability-card interactive-card group" 
+          {...glow1}
+          variants={fadeInUp}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+          <h5 className="flex items-center gap-2">
+            <Zap size={16} className="text-yellow-400 group-hover:scale-110 transition-transform" />
+            Fix & Secure
+          </h5>
+          <p>Analyze errors and automatically apply security patches with AI precision.</p>
+        </motion.div>
+        
+        <motion.div 
+          ref={card2Ref} 
+          className="capability-card interactive-card group" 
+          {...glow2}
+          variants={fadeInUp}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+          <h5 className="flex items-center gap-2">
+            <HelpCircle size={16} className="text-blue-400 group-hover:scale-110 transition-transform" />
+            Code Review
+          </h5>
+          <p>Get comprehensive AI-powered reviews for best practices and logic improvements.</p>
+        </motion.div>
+        
+        <motion.div 
+          ref={card3Ref} 
+          className="capability-card interactive-card group" 
+          {...glow3}
+          variants={fadeInUp}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+          <h5 className="flex items-center gap-2">
+            <FileText size={16} className="text-green-400 group-hover:scale-110 transition-transform" />
+            Add Docs
+          </h5>
+          <p>Generate comprehensive docstrings and comments for better code maintainability.</p>
+        </motion.div>
+        
+        <motion.div 
+          ref={card4Ref} 
+          className="capability-card interactive-card group" 
+          {...glow4}
+          variants={fadeInUp}
+          whileHover={{ y: -4, transition: { duration: 0.2 } }}
+        >
+          <h5 className="flex items-center gap-2">
+            <Code size={16} className="text-purple-400 group-hover:scale-110 transition-transform" />
+            Explain Code
+          </h5>
+          <p>Receive clear, detailed explanations of complex algorithms and logic patterns.</p>
+        </motion.div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+/* -------------------------------------------------
+   Enhanced Confirmation Modal
+---------------------------------------------------*/
+function ConfirmationModal({ isOpen, onClose, onConfirm, title, children, promptText, confirmLabel = "Confirm" }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  children: React.ReactNode;
+  promptText: string;
+  confirmLabel?: string;
+}) {
+  const [inputValue, setInputValue] = useState("");
+  const isMatch = inputValue === promptText;
+
+  useEffect(() => {
+    if (isOpen) {
+      setInputValue("");
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div 
+        className="modal-backdrop backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+      >
+        <motion.div 
+          className="modal-panel max-w-md mx-auto mt-20"
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.95, opacity: 0 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-6 space-y-6">
+            <div className="text-center">
+              <h3 className="text-xl font-semibold text-text-primary">{title}</h3>
+            </div>
+            
+            <div className="text-center text-text-secondary">
+              {children}
+            </div>
+            
+            <div className="space-y-3">
+              <p className="text-sm text-text-secondary">
+                To confirm, please type "<strong className="text-text-primary font-mono">{promptText}</strong>" below:
+              </p>
+              <input
+                type="text"
+                className="input-base w-full font-mono"
+                placeholder={promptText}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <motion.button 
+                onClick={onClose} 
+                className="btn btn-secondary w-full"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                Cancel
+              </motion.button>
+              <motion.button 
+                onClick={onConfirm} 
+                disabled={!isMatch} 
+                className="btn btn-destructive w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                whileHover={isMatch ? { scale: 1.02 } : {}}
+                whileTap={isMatch ? { scale: 0.98 } : {}}
+              >
+                {confirmLabel}
+              </motion.button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
   );
 }
 
 /* -------------------------------------------------
-   Main Application Component
+   Enhanced API Keys View
+---------------------------------------------------*/
+function ApiKeysView({ token, savedKeys, onKeysChange }: {
+    token: string | null;
+    savedKeys: { name: string; provider: string }[];
+    onKeysChange: () => void;
+}) {
+    const [provider, setProvider] = useState("gemini");
+    const [apiKey, setApiKey] = useState("");
+    const [keyName, setKeyName] = useState("");
+    const [message, setMessage] = useState<string | null>(null);
+    const [isConfirmModalOpen, setConfirmModalOpen] = useState(false);
+    const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
+    const [editingKeyName, setEditingKeyName] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const saveOrUpdateKey = async () => {
+        if (!token || !apiKey) { 
+            setMessage("Please provide a non-empty API key."); 
+            return; 
+        }
+        
+        setIsLoading(true);
+        const nameToSend = keyName.trim() || provider;
+        
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/keys`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ provider, name: nameToSend, api_key: apiKey }),
+            });
+            
+            if (res.ok) {
+                setMessage(editingKeyName ? `✓ Updated key: ${nameToSend}` : `✓ Saved key: ${nameToSend}`);
+                resetForm();
+                onKeysChange();
+            } else {
+                const errData = await res.json();
+                setMessage(`Failed to save key: ${errData.detail || "Unknown error"}`);
+            }
+        } catch (e) { 
+            console.error("save err", e); 
+            setMessage("Error saving key"); 
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const remove = async (nameToDelete: string) => {
+        if (!token) return;
+        
+        try {
+            const res = await fetch(`${BACKEND_URL}/api/keys`, {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ name: nameToDelete }),
+            });
+            
+            if (res.ok) { 
+                setMessage(`✓ Deleted key: ${nameToDelete}`); 
+                onKeysChange(); 
+            } else { 
+                setMessage("Failed to delete key."); 
+            }
+        } catch (e) { 
+            console.error("delete err", e); 
+            setMessage("Error deleting key"); 
+        }
+    };
+    
+    const handleDeleteClick = (keyName: string) => {
+        setKeyToDelete(keyName);
+        setConfirmModalOpen(true);
+    };
+
+    const handleConfirmDelete = () => {
+        if (keyToDelete) { remove(keyToDelete); }
+        setConfirmModalOpen(false);
+        setKeyToDelete(null);
+    };
+
+    const handleEditClick = (key: { name: string; provider: string }) => {
+        setEditingKeyName(key.name);
+        setKeyName(key.name);
+        setProvider(key.provider);
+        setApiKey("");
+        setMessage("Editing key. Provide the new API key to update.");
+    };
+
+    const resetForm = () => {
+        setEditingKeyName(null);
+        setKeyName("");
+        setProvider("gemini");
+        setApiKey("");
+        setMessage("");
+    };
+
+    return (
+        <div className="space-y-8">
+            {/* Form Section */}
+            <motion.div 
+                className="space-y-6"
+                variants={fadeInUp}
+                initial="initial"
+                animate="animate"
+            >
+                <div className="flex items-center gap-3">
+                    <KeyRound size={24} className="text-accent-primary" />
+                    <h3 className="text-2xl font-semibold">
+                        {editingKeyName ? `Edit '${editingKeyName}'` : "Add New API Key"}
+                    </h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-text-secondary">Key Name (Optional)</label>
+                        <input 
+                            className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                            type="text" 
+                            placeholder="e.g., Personal Gemini Key" 
+                            value={keyName} 
+                            onChange={(e) => setKeyName(e.target.value)} 
+                            disabled={!!editingKeyName} 
+                        />
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-text-secondary">Provider</label>
+                        <select 
+                            className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                            value={provider} 
+                            onChange={(e) => setProvider(e.target.value)} 
+                            disabled={!!editingKeyName}
+                        >
+                            {Object.keys(MODEL_OPTIONS).filter((p) => !["auto", "ollama"].includes(p)).map((p) => 
+                                <option key={p} value={p} className="capitalize">{p}</option>
+                            )}
+                        </select>
+                    </div>
+                </div>
+                
+                <div className="space-y-2">
+                    <label className="text-sm font-medium text-text-secondary">API Key</label>
+                    <input 
+                        className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                        type="password" 
+                        placeholder={editingKeyName ? "Enter new key to update" : "Paste your API key here"} 
+                        value={apiKey} 
+                        onChange={(e) => setApiKey(e.target.value)} 
+                    />
+                </div>
+                
+                <div className="flex gap-3 pt-2">
+                    {editingKeyName && (
+                        <motion.button 
+                            onClick={resetForm} 
+                            className="btn btn-secondary flex-1"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                        >
+                            Cancel Edit
+                        </motion.button>
+                    )}
+                    <motion.button 
+                        onClick={saveOrUpdateKey} 
+                        disabled={isLoading}
+                        className="btn btn-primary flex-1"
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                    >
+                        {isLoading ? (
+                            <div className="flex items-center gap-2">
+                                <LoadingSpinner size={14} />
+                                Saving...
+                            </div>
+                        ) : (
+                            editingKeyName ? "Update Key" : "Save Key"
+                        )}
+                    </motion.button>
+                </div>
+                
+                <AnimatePresence>
+                    {message && (
+                        <motion.div
+                            className={`text-center p-3 rounded-lg border ${
+                                message.startsWith('✓') 
+                                    ? 'bg-green-500/10 border-green-500/20 text-green-400' 
+                                    : 'bg-red-500/10 border-red-500/20 text-red-400'
+                            }`}
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                        >
+                            <p className="text-sm">{message}</p>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </motion.div>
+
+            {/* Saved Keys Section */}
+            <motion.div 
+                className="space-y-6"
+                variants={fadeInUp}
+                initial="initial"
+                animate="animate"
+                transition={{ delay: 0.1 }}
+            >
+                <div className="flex items-center gap-3">
+                    <Settings size={24} className="text-accent-primary" />
+                    <h3 className="text-2xl font-semibold">Saved Keys</h3>
+                    {savedKeys.length > 0 && (
+                        <Badge tone="info">{savedKeys.length} keys</Badge>
+                    )}
+                </div>
+                
+                {savedKeys.length > 0 ? (
+                    <div className="space-y-3">
+                        {savedKeys.map((key, index) => (
+                            <motion.div 
+                                key={key.name} 
+                                className="settings-row bg-background-light/30 p-4 rounded-xl border border-border-primary hover:border-accent-primary/30 transition-all duration-200"
+                                initial={{ opacity: 0, x: -20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: index * 0.05 }}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-2 h-2 bg-accent-primary rounded-full"></div>
+                                    <div>
+                                        <p className="font-mono text-sm font-medium text-text-primary">{key.name}</p>
+                                        <p className="text-xs text-text-secondary capitalize">Provider: {key.provider}</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex gap-2">
+                                    <motion.button 
+                                        onClick={() => handleEditClick(key)} 
+                                        className="btn btn-secondary text-sm px-3 py-1.5"
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                    >
+                                        <Edit size={14}/> Edit
+                                    </motion.button>
+                                    <motion.button 
+                                        onClick={() => handleDeleteClick(key.name)} 
+                                        className="btn btn-destructive text-sm px-3 py-1.5"
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                    >
+                                        <Trash2 size={14}/> Delete
+                                    </motion.button>
+                                </div>
+                            </motion.div>
+                        ))}
+                    </div>
+                ) : (
+                    <motion.div 
+                        className="text-center py-12 px-6 border border-dashed border-border-primary rounded-xl"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                    >
+                        <KeyRound size={48} className="mx-auto text-text-secondary mb-4" />
+                        <p className="text-text-secondary text-lg mb-2">No API keys saved yet</p>
+                        <p className="text-text-secondary/70 text-sm">Add your first API key to get started with AI-powered code analysis</p>
+                    </motion.div>
+                )}
+            </motion.div>
+            
+            <ConfirmationModal
+                isOpen={isConfirmModalOpen}
+                onClose={() => setConfirmModalOpen(false)}
+                onConfirm={handleConfirmDelete}
+                title="Delete API Key"
+                promptText={keyToDelete || ""}
+                confirmLabel="Delete Key"
+            >
+                <p>This action cannot be undone. This will permanently delete the <strong className="text-red-400">{keyToDelete}</strong> API key from your account.</p>
+            </ConfirmationModal>
+        </div>
+    );
+}
+
+/* -------------------------------------------------
+   Enhanced Account Manager
+---------------------------------------------------*/
+function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTier }: {
+  token: string | null;
+  email: string | undefined;
+  savedKeys: { name: string; provider: string }[];
+  onKeysChange: () => void;
+  onClose: () => void;
+  userTier: string | null;
+}) {
+  const [activeView, setActiveView] = useState('account');
+  
+  const getTierBadgeProps = (tier: string | null) => {
+    const tierLower = tier?.toLowerCase();
+    switch (tierLower) {
+      case 'pro': return { tone: 'info', children: 'Pro Plan' };
+      case 'enterprise': return { tone: 'success', children: 'Enterprise' };
+      default: return { tone: 'default', children: 'Free Plan' };
+    }
+  };
+
+  const navItems = [
+    { id: 'account', label: 'Account', icon: User },
+    { id: 'api_keys', label: 'API Keys', icon: KeyRound }
+  ];
+
+  return (
+    <motion.div 
+      className="modal-panel"
+      variants={scaleIn}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+        <div className="settings-header">
+            <motion.button 
+                onClick={onClose} 
+                className="btn btn-secondary"
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+            >
+                <ChevronLeft size={16} /> Back to Dashboard
+            </motion.button>
+        </div>
+        
+        <div className="settings-modal-layout">
+            <nav className="settings-sidebar">
+                {navItems.map((item, index) => (
+                    <motion.button 
+                        key={item.id}
+                        className="settings-nav-item" 
+                        data-active={activeView === item.id} 
+                        onClick={() => setActiveView(item.id)}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                    >
+                        <item.icon size={16} /> {item.label}
+                    </motion.button>
+                ))}
+            </nav>
+            
+            <main className="settings-content">
+                <AnimatePresence mode="wait">
+                    {activeView === 'account' && (
+                        <motion.div
+                            key="account"
+                            variants={fadeInUp}
+                            initial="initial"
+                            animate="animate"
+                            exit="exit"
+                            className="space-y-8"
+                        >
+                            <motion.div className="settings-section">
+                                <h3 className="flex items-center gap-3">
+                                    <User size={24} className="text-accent-primary" />
+                                    Account Information
+                                </h3>
+                                <div className="settings-row bg-background-light/30 p-4 rounded-xl border border-border-primary">
+                                    <div className="settings-row-info">
+                                        <label>Email Address</label>
+                                        <p className="text-text-primary font-mono">{email}</p>
+                                    </div>
+                                    <motion.button 
+                                        className="btn btn-secondary text-sm"
+                                        whileHover={{ scale: 1.05 }}
+                                    >
+                                        Change Email
+                                    </motion.button>
+                                </div>
+                            </motion.div>
+                            
+                            <motion.div className="settings-section">
+                                <h3 className="flex items-center gap-3">
+                                    <Zap size={24} className="text-accent-primary" />
+                                    Subscription
+                                </h3>
+                                <div className="settings-row bg-background-light/30 p-4 rounded-xl border border-border-primary">
+                                    <div className="settings-row-info">
+                                        <label>Current Plan</label>
+                                        <div className="mt-2">
+                                            <Badge {...getTierBadgeProps(userTier)}/>
+                                        </div>
+                                    </div>
+                                    <motion.button 
+                                        className="btn btn-primary"
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                    >
+                                        Upgrade Plan
+                                    </motion.button>
+                                </div>
+                            </motion.div>
+                            
+                            <motion.div className="settings-section">
+                                <h3 className="flex items-center gap-3">
+                                    <LogOut size={24} className="text-accent-primary" />
+                                    Account Actions
+                                </h3>
+                                <div className="settings-row bg-background-light/30 p-4 rounded-xl border border-border-primary">
+                                    <div className="settings-row-info">
+                                        <label>Sign Out</label>
+                                        <p className="text-text-secondary">End your current session securely</p>
+                                    </div>
+                                    <motion.button 
+                                        onClick={() => supabase.auth.signOut()} 
+                                        className="btn btn-secondary"
+                                        whileHover={{ scale: 1.05 }}
+                                        whileTap={{ scale: 0.95 }}
+                                    >
+                                        <LogOut size={16} />
+                                        Sign Out
+                                    </motion.button>
+                                </div>
+                            </motion.div>
+                        </motion.div>
+                    )}
+                    
+                    {activeView === 'api_keys' && (
+                        <motion.div
+                            key="api_keys"
+                            variants={fadeInUp}
+                            initial="initial"
+                            animate="animate"
+                            exit="exit"
+                        >
+                            <ApiKeysView token={token} savedKeys={savedKeys} onKeysChange={onKeysChange} />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </main>
+        </div>
+    </motion.div>
+  );
+}
+
+/* -------------------------------------------------
+   Enhanced Animated Toggle Switch Component
+---------------------------------------------------*/
+function ToggleSwitch({ label, description, checked, onChange, icon: Icon }: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  icon?: React.ElementType;
+}) {
+  return (
+    <motion.label 
+      className="toggle-switch-label group cursor-pointer"
+      whileHover={{ scale: 1.01 }}
+      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+    >
+      {Icon && (
+        <motion.div
+          className="mr-4 flex-shrink-0"
+          animate={{
+            scale: checked ? 1.15 : 1,
+            color: checked ? 'var(--accent-primary)' : 'var(--text-secondary)'
+          }}
+          transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+        >
+          <Icon size={22} className="animated-icon" />
+        </motion.div>
+      )}
+      
+      <div className="toggle-switch-info flex-grow">
+        <h5 className="group-hover:text-accent-primary transition-colors">{label}</h5>
+        <p className="group-hover:text-text-primary transition-colors">{description}</p>
+      </div>
+      
+      <div className="switch relative">
+        <input 
+          type="checkbox" 
+          checked={checked} 
+          onChange={(e) => onChange(e.target.checked)}
+          className="sr-only"
+        />
+        <motion.span 
+          className="slider"
+          animate={{
+            backgroundColor: checked ? 'var(--accent-primary)' : 'var(--background-light)'
+          }}
+          transition={{ duration: 0.2 }}
+        >
+          <motion.span
+            className="slider-thumb"
+            animate={{
+              x: checked ? 18 : 3
+            }}
+            transition={{ type: "spring", stiffness: 500, damping: 30 }}
+          />
+        </motion.span>
+      </div>
+    </motion.label>
+  );
+}
+
+/* -------------------------------------------------
+   Enhanced Main Application Component
 ---------------------------------------------------*/
 function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name: string; provider: string }[] }) {
   type ViewState = JobStatus;
-  const [inputMode, setInputMode] = useState<"paste" | "upload">("paste");
   const [pastedCode, setPastedCode] = useState("");
-  const [files, setFiles] = useState<File[]>([]);
   const [errorLog, setErrorLog] = useState("");
   const [task, setTask] = useState("fix_and_secure");
   const [result, setResult] = useState<ResultShape | null>(null);
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [status, setStatus] = useState("Select a task, provide code, and run the analysis.");
-  const [provider, setProvider] = useState("auto");
-  const [model, setModel] = useState("(auto-select)");
+  const [provider, setProvider] = useState("gemini");
+  const [model, setModel] = useState("gemini-1.5-pro");
   const [jobId, setJobId] = useState<string | null>(null);
   const [tokenSaver, setTokenSaver] = useState(false);
   const [maxSecurity, setMaxSecurity] = useState(true);
-  const [chunking, setChunking] = useState(false);
-  const [noise, setNoise] = useState(true);
   const [copyOK, setCopyOK] = useState("");
   const [view, setView] = useState<ViewState>("idle");
   const [selectedKeyName, setSelectedKeyName] = useState("");
 
-  const onDrop = useCallback((acceptedFiles: File[]) => { setFiles(prevFiles => [...prevFiles, ...acceptedFiles]); setInputMode("upload"); }, []);
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
-  const success = useCallback((d: any) => { setResult(d); const r = d.result || {}; if (r && typeof r === "object" && Object.keys(r).length > 0) { setActiveFile(Object.keys(r)[0]); } else { setActiveFile(null); } setView("result"); setStatus("Done"); }, []);
-  const fail = useCallback((err: string) => { if (err?.includes?.("Daily job quota") || err?.includes?.("quota")) { setView("upgrade"); } else { setResult({ notice: `Error: ${err}` }); setView("error"); } setStatus("Failed"); }, []);
+  const success = useCallback((d: any) => {
+    let resultData = d.result || {};
+    let firstFileName = null;
+    if (typeof resultData === 'string') {
+      try { resultData = JSON.parse(resultData); } 
+      catch (e) {
+        console.error("Failed to parse result JSON:", e);
+        setResult({ ...d, result: { notice: resultData } });
+        setView("result");
+        return;
+      }
+    }
+    if (typeof resultData === 'object' && Object.keys(resultData).length > 0) {
+      firstFileName = Object.keys(resultData)[0];
+    }
+    setResult({ ...d, result: resultData });
+    setActiveFile(firstFileName);
+    setView("result");
+    setStatus("Analysis completed successfully");
+  }, []);
+
+  const fail = useCallback((err: string) => { 
+    if (err?.includes?.("Daily job quota")) { 
+      setView("upgrade"); 
+    } else { 
+      setResult({ notice: `Error: ${err}` }); 
+      setView("error"); 
+    } 
+    setStatus("Analysis failed"); 
+  }, []);
+  
   useJobPolling(jobId, token, success, fail, setStatus);
 
   useEffect(() => {
     if (savedKeys) {
       const keysForProvider = savedKeys.filter(k => k.provider === provider);
-      if (keysForProvider.length > 0) {
-        setSelectedKeyName(keysForProvider[0].name);
-      } else {
-        setSelectedKeyName("");
-      }
+      setSelectedKeyName(keysForProvider.length > 0 ? keysForProvider[0].name : "");
     }
   }, [provider, savedKeys]);
-
+  
   const submit = async () => {
-    if (inputMode === "paste" && !pastedCode.trim()) return fail("Please paste your code.");
-    if (inputMode === "upload" && files.length === 0) return fail("Please upload files.");
-    const requiresKey = provider !== 'auto' && provider !== 'ollama';
-    if (requiresKey && !selectedKeyName) { return fail(`Please go to your account panel and save an API key for the '${provider}' provider.`); }
+    if (!pastedCode.trim()) return fail("Please paste your code.");
+    const requiresKey = !['auto', 'ollama'].includes(provider);
+    if (requiresKey && !selectedKeyName) { 
+      return fail(`Please save an API key for '${provider}' in your account.`); 
+    }
+    
     setView("loading");
     setResult(null);
     setJobId(null);
-    setStatus("Submitting…");
+    setStatus("Submitting analysis request...");
+    
     const fd = new FormData();
-    if (inputMode === "paste") fd.append("files", new Blob([pastedCode]), "pasted_code.py");
-    else files.forEach((f) => fd.append("files", f));
+    fd.append("files", new Blob([pastedCode]), "pasted_code.py");
     fd.append("task", task);
     if (errorLog) fd.append("error_log", errorLog);
     fd.append("provider", provider);
     if (model) fd.append("model", model);
-    if (selectedKeyName) { fd.append("api_key_name", selectedKeyName); }
+    if (selectedKeyName) fd.append("api_key_name", selectedKeyName);
     fd.append("token_saver_enabled", String(tokenSaver));
     fd.append("abstraction_enabled", String(maxSecurity));
     fd.append("abstraction_level", maxSecurity ? "paranoid" : "standard");
-    fd.append("abstraction_chunking", String(chunking));
-    fd.append("abstraction_noise", String(noise));
+    
     try {
       if (!token) throw new Error("Authentication token is missing.");
-      const res = await fetch(`${BACKEND_URL}/api/process_code`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: fd });
+      const res = await fetch(`${BACKEND_URL}/api/process_code`, { 
+        method: "POST", 
+        headers: { Authorization: `Bearer ${token}` }, 
+        body: fd 
+      });
       const d = await res.json();
-      if (res.ok) { setJobId(d.job_id); setStatus("Job submitted — awaiting result..."); } else { fail(d.detail || d.error || "Submission failed."); }
-    } catch (e: any) { fail(e.message || "A network error occurred."); }
+      if (res.ok) { 
+        setJobId(d.job_id); 
+        setStatus("Job submitted, processing..."); 
+      } else { 
+        fail(d.detail || "Submission failed."); 
+      }
+    } catch (e: any) { 
+      fail(e.message || "A network error occurred."); 
+    }
   };
 
-  const copy = (textToCopy?: string) => { let text = textToCopy || ""; if (!text && result && result.result) { if (typeof result.result === "string") text = result.result; else if (typeof result.result === "object" && activeFile) text = (result.result as Record<string, string>)[activeFile] || ""; } if (!text) return; navigator.clipboard.writeText(text).then(() => { setCopyOK("Copied!"); setTimeout(() => setCopyOK(""), 2000); }); };
-  useEffect(() => { const models = MODEL_OPTIONS[provider] || ["(auto-select)"]; setModel(models[0]); }, [provider]);
+  const copy = (textToCopy?: string) => {
+    let text = textToCopy || "";
+    if (!text && result?.result) {
+      if (typeof result.result === "string") text = result.result;
+      else if (typeof result.result === "object" && activeFile) text = (result.result as Record<string, string>)[activeFile] || "";
+    }
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyOK("Copied!");
+      setTimeout(() => setCopyOK(""), 2000);
+    });
+  };
+
+  const resetAll = () => {
+    setPastedCode("");
+    setErrorLog("");
+    setResult(null);
+    setView("idle");
+    setStatus("Select a task, provide code, and run the analysis.");
+  };
+
+  useEffect(() => { 
+    const models = MODEL_OPTIONS[provider] || ["(auto-select)"]; 
+    setModel(models[0]); 
+  }, [provider]);
+  
   const resultData = result?.result || {};
-  const analysisText = result?.analysis || "";
   const activeFileContent = activeFile && typeof resultData === "object" ? (resultData as Record<string, string>)[activeFile] : (typeof resultData === "string" ? resultData : "");
 
+  const taskOptions = [
+    { value: "fix_and_secure", label: "Fix & Secure", icon: Zap },
+    { value: "code_review", label: "Code Review", icon: HelpCircle },
+    { value: "documentation", label: "Add Documentation", icon: FileText },
+    { value: "refactor", label: "Refactor", icon: Code },
+    { value: "explain", label: "Explain Code", icon: Terminal }
+  ];
+
   return (
-    <main className="layout-grid fade-in gap-8">
-      <section className="flex flex-col gap-6">
-        <div className="flex gap-2">{["paste", "upload"].map((m) => (<button key={m} onClick={() => setInputMode(m as any)} className={`btn btn-laser flex-1 ${inputMode === m ? "btn-primary" : "btn-secondary"} transition-transform hover:scale-105`}>{m === "paste" ? "Paste Code" : "Upload Files"}</button>))}</div>
-        {inputMode === "paste" ? (<textarea className="code-input min-h-[220px] font-mono text-sm" placeholder="Paste your code here..." value={pastedCode} onChange={(e) => setPastedCode(e.target.value)} />) : (<div {...getRootProps()} className="card text-center p-6 border-2 border-dashed hover:border-accent-primary transition-colors cursor-pointer"><input {...getInputProps()} /><UploadCloud className="w-12 h-12 mx-auto mb-4" /><div className="text-sm">{isDragActive ? "Drop files… " : "Drag & drop files here, or click to select"}</div>{files.length > 0 && (<ul className="mt-4 text-left text-sm space-y-1">{files.map((f) => <li key={f.name} className="truncate">{f.name} ({Math.round(f.size / 1024)} KB)</li>)}</ul>)}</div>)}
-        <div className="card p-4 space-y-2"><h4 className="flex items-center gap-2"><Bot size={16} /> Select Task</h4><select className="input-base" value={task} onChange={(e) => setTask(e.target.value)}><option value="fix_and_secure">Fix & Secure</option><option value="code_review">Code Review</option><option value="documentation">Add Documentation</option><option value="refactor">Refactor</option><option value="explain">Explain Code</option></select></div>
-        <AnimatePresence>{task === "fix_and_secure" && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="card p-4 space-y-2 overflow-hidden"><h4 className="flex items-center gap-2"><Terminal size={16} /> Terminal Output</h4><textarea className="code-input min-h-[120px] text-sm" placeholder="Paste terminal output (stack traces, error logs) here..." value={errorLog} onChange={(e) => setErrorLog(e.target.value)} /></motion.div>)}</AnimatePresence>
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="card p-4 space-y-3"><h4 className="flex items-center gap-2"><Settings size={16} /> Options</h4><label className="flex items-center justify-between cursor-pointer text-sm font-medium"><span>Max Security (Abstraction)</span><input type="checkbox" checked={maxSecurity} onChange={(e) => setMaxSecurity(e.target.checked)} /></label><AnimatePresence>{maxSecurity && (<motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="pl-4 border-l-2 border-border-secondary space-y-3 pt-3 mt-3 overflow-hidden"><label className="flex items-center justify-between cursor-pointer text-sm"><span>Paranoid Noise</span><input type="checkbox" checked={noise} onChange={(e) => setNoise(e.target.checked)} /></label><label className="flex items-center justify-between cursor-pointer text-sm"><span>Chunking (Python only)</span><input type="checkbox" checked={chunking} onChange={(e) => setChunking(e.target.checked)} /></label></motion.div>)}</AnimatePresence><label className="flex items-center justify-between cursor-pointer text-sm font-medium pt-2 border-t border-border-secondary"><span>Token Saver (Diff Output)</span><input type="checkbox" checked={tokenSaver} onChange={(e) => setTokenSaver(e.target.checked)} /></label><div className="text-xs text-text-secondary pt-2">When Token Saver is enabled the UI will show diffs instead of full replaced files to save model tokens and make reviews faster.</div></div>
-          <div className="grid gap-2"><select className="input-base" value={provider} onChange={(e) => setProvider(e.target.value)}>{Object.keys(MODEL_OPTIONS).map((p) => <option key={p} value={p}>{p}</option>)}</select><select className="input-base" value={model} onChange={(e) => setModel(e.target.value)} disabled={(MODEL_OPTIONS[provider] || []).length <= 1}>{(MODEL_OPTIONS[provider] || []).map((m) => <option key={m} value={m}>{m}</option>)}</select>
-            {provider !== 'auto' && provider !== 'ollama' && (<div className="card p-4 space-y-2"><h4 className="flex items-center gap-2"><KeyRound size={16} /> Select API Key</h4><select className="input-base" value={selectedKeyName} onChange={(e) => setSelectedKeyName(e.target.value)} disabled={savedKeys.filter(k => k.provider === provider).length === 0}>{savedKeys.filter(k => k.provider === provider).length === 0 ? (<option value="">No keys saved for {provider}</option>) : (savedKeys.filter(key => key.provider === provider).map((key) => (<option key={key.name} value={key.name}>{key.name}</option>)))}</select></div>)}
-            <div className="card p-3"><div className="flex items-center gap-2 mb-2"><Info size={16} /> Quick Summary</div><div className="text-xs text-text-secondary">Provider: <strong>{provider}</strong><br />Model: <strong>{model}</strong><br />Abstraction: <strong>{maxSecurity ? "Paranoid" : "Standard"}</strong></div></div>
-          </div>
+    <main className="content-grid">
+      <div className="left-pane">
+        <motion.div 
+          className="space-y-6"
+          variants={staggerContainer}
+          initial="initial"
+          animate="animate"
+        >
+          {/* Code Input Section */}
+          <motion.div 
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+            variants={fadeInUp}
+          >
+            <div className="code-wrapper group">
+               <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
+                 <Code size={16} />
+                 Buggy Code
+               </h4>
+               <textarea 
+                 className="code-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
+                 placeholder="Paste your buggy code here..." 
+                 value={pastedCode} 
+                 onChange={(e) => setPastedCode(e.target.value)} 
+               />
+            </div>
+            <div className="code-wrapper group">
+               <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
+                 <Terminal size={16} />
+                 Terminal Log
+               </h4>
+               <textarea 
+                 className="terminal-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
+                 placeholder="Paste terminal output, stack traces, errors here..." 
+                 value={errorLog} 
+                 onChange={(e) => setErrorLog(e.target.value)} 
+               />
+            </div>
+          </motion.div>
+
+          {/* Task Selection */}
+          <motion.div 
+            className="card space-y-6"
+            variants={fadeInUp}
+          >
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
+                <Settings size={16} />
+                Task Selection
+              </label>
+              <select 
+                className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                value={task} 
+                onChange={(e) => setTask(e.target.value)}
+              >
+                {taskOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text-secondary">Provider</label>
+                <select 
+                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                  value={provider} 
+                  onChange={(e) => setProvider(e.target.value)}
+                >
+                  {Object.keys(MODEL_OPTIONS).map((p) => (
+                    <option key={p} value={p} className="capitalize">{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text-secondary">Model</label>
+                <select 
+                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                  value={model} 
+                  onChange={(e) => setModel(e.target.value)} 
+                  disabled={(MODEL_OPTIONS[provider] || []).length <= 1}
+                >
+                  {(MODEL_OPTIONS[provider] || []).map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            
+            {provider !== 'auto' && provider !== 'ollama' && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-text-secondary">API Key</label>
+                <select 
+                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                  value={selectedKeyName} 
+                  onChange={(e) => setSelectedKeyName(e.target.value)} 
+                  disabled={savedKeys.filter(k => k.provider === provider).length === 0}
+                >
+                  {savedKeys.filter(k => k.provider === provider).length === 0 ? 
+                    (<option value="">No keys saved for {provider}</option>) : 
+                    (savedKeys.filter(key => key.provider === provider).map((key) => (
+                      <option key={key.name} value={key.name}>{key.name}</option>
+                    )))
+                  }
+                </select>
+              </div>
+            )}
+          </motion.div>
+
+          {/* Settings Toggles */}
+          <motion.div 
+            className="card space-y-4"
+            variants={fadeInUp}
+          >
+             <ToggleSwitch 
+               label="Max Security (Abstraction)" 
+               description="Abstracts code for maximum privacy before sending to the LLM" 
+               checked={maxSecurity} 
+               onChange={setMaxSecurity} 
+               icon={ShieldCheck} 
+             />
+             <ToggleSwitch 
+               label="Token Saver (Diff Output)" 
+               description="Show compact diffs instead of full files to save tokens" 
+               checked={tokenSaver} 
+               onChange={setTokenSaver} 
+               icon={FileText} 
+             />
+          </motion.div>
+
+          {/* Action Buttons */}
+          <motion.div 
+            className="flex gap-4"
+            variants={fadeInUp}
+          >
+              <motion.button 
+                onClick={submit} 
+                disabled={view === "loading"} 
+                className={`btn btn-primary flex-1 ${view === "loading" ? "btn-loading" : ""}`}
+                whileHover={{ scale: view === "loading" ? 1 : 1.02 }}
+                whileTap={{ scale: view === "loading" ? 1 : 0.98 }}
+              >
+                {view === "loading" ? (
+                  <div className="flex items-center gap-2">
+                    <LoadingSpinner size={16} />
+                    Running Analysis...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Zap size={16} />
+                    Run Analysis
+                  </div>
+                )}
+              </motion.button>
+              
+              <motion.button 
+                onClick={resetAll} 
+                className="btn btn-secondary px-6"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <X size={16} />
+                Reset
+              </motion.button>
+          </motion.div>
+        </motion.div>
+      </div>
+      
+      <aside className="right-pane">
+        <div className="card h-full min-h-[600px] overflow-hidden">
+            <AnimatePresence mode="wait">
+              {view === 'idle' && <OnboardingIdleView />}
+              
+              {view === 'loading' && (
+                <motion.div 
+                  key="loading" 
+                  className="flex flex-col items-center justify-center h-full text-center space-y-6"
+                  variants={fadeInUp}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                >
+                   <motion.div
+                     animate={{ rotate: 360 }}
+                     transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                   >
+                     <Bot size={48} className="text-accent-primary" />
+                   </motion.div>
+                   
+                   <div className="space-y-2">
+                     <h3 className="text-lg font-semibold">Processing Your Code</h3>
+                     <motion.p 
+                       className="text-text-secondary"
+                       key={status}
+                       initial={{ opacity: 0, y: 5 }}
+                       animate={{ opacity: 1, y: 0 }}
+                     >
+                       {status}
+                     </motion.p>
+                   </div>
+                   
+                   <div className="w-full max-w-xs">
+                     <div className="bg-background-light h-2 rounded-full overflow-hidden">
+                       <motion.div
+                         className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                         initial={{ width: "0%" }}
+                         animate={{ width: "100%" }}
+                         transition={{ duration: 8, ease: "easeInOut" }}
+                       />
+                     </div>
+                   </div>
+                </motion.div>
+              )}
+              
+              {(view === 'result' || view === 'error') && result && (
+                <motion.div 
+                  key="result" 
+                  className="flex flex-col h-full space-y-6"
+                  variants={fadeInUp}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                >
+                    {result.analysis && (
+                      <motion.div 
+                        className="space-y-3"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                      >
+                        <h3 className="flex items-center gap-2 font-semibold text-text-primary">
+                          <Bot size={20} className="text-accent-primary" /> 
+                          AI Analysis
+                        </h3>
+                        <div className="bg-background-light/50 p-4 rounded-lg border border-border-primary">
+                          <pre className="whitespace-pre-wrap text-sm text-text-secondary leading-relaxed font-sans">
+                            {result.analysis}
+                          </pre>
+                        </div>
+                      </motion.div>
+                    )}
+                    
+                    <div className="flex-grow flex flex-col min-h-0">
+                      <div className="flex justify-between items-center mb-4">
+                         <h3 className="text-lg font-semibold flex items-center gap-2">
+                           <Code size={20} />
+                           Corrected Code
+                         </h3>
+                         <motion.button 
+                           onClick={() => copy()} 
+                           className="btn btn-secondary flex items-center gap-2"
+                           whileHover={{ scale: 1.05 }}
+                           whileTap={{ scale: 0.95 }}
+                         >
+                           {copyOK ? (
+                             <>
+                               <ClipboardCheck size={16} className="text-green-400" />
+                               {copyOK}
+                             </>
+                           ) : (
+                             <>
+                               <Clipboard size={16} />
+                               Copy Code
+                             </>
+                           )}
+                         </motion.button>
+                      </div>
+                       
+                      <div className="code-output-wrapper flex-grow rounded-lg bg-code-editor border border-border-primary p-4 overflow-auto">
+                        <SyntaxHighlighter 
+                          language="python" 
+                          style={atomOneDark} 
+                          wrapLines={true} 
+                          wrapLongLines={true}
+                          customStyle={{
+                            background: 'transparent',
+                            padding: 0,
+                            margin: 0,
+                            fontSize: '14px'
+                          }}
+                        >
+                          {activeFileContent || result.notice || "No code returned."}
+                        </SyntaxHighlighter>
+                      </div>
+                    </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
         </div>
-        <div className="flex gap-3 items-center"><button onClick={submit} disabled={view === "loading"} className={`btn btn-primary btn-laser py-3 text-lg flex-1 ${view === "loading" ? "animate-pulse" : ""}`}>{view === "loading" ? status : "Run Analysis"}</button><button onClick={() => { setPastedCode(""); setFiles([]); setErrorLog(""); setResult(null); setView("idle"); }} className="btn btn-secondary btn-laser">Reset</button></div>
-      </section>
-      <aside className="card p-4 results-card relative overflow-hidden flex flex-col"><AnimatePresence mode="wait">{view === "loading" && (<motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="processing"><Bot className="mx-auto w-12 h-12 animate-spin mb-4 text-accent-primary" /><p className="typing-dots">{status}</p></motion.div>)}{view === "upgrade" && <UpgradePrompt key="upgrade" />}{(view === "result" || view === "error") && result && (<motion.div key="result" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col h-full">{analysisText && (<div className="mb-4 p-3 bg-background-light rounded-lg border border-border-color max-h-48 overflow-y-auto"><h3 className="font-bold mb-2 text-accent-primary flex items-center gap-2"><Bot size={16} /> AI Analysis</h3><pre className="whitespace-pre-wrap text-sm">{analysisText}</pre></div>)}<div className="flex-grow flex flex-col min-h-0"><div className="flex justify-between mb-2 items-center"><div className="text-sm text-text-secondary">{tokenSaver ? "Diff View" : "Full Code"}</div><div className="flex items-center gap-2"><button onClick={() => copy()} className="btn btn-secondary btn-laser flex items-center gap-2">{copyOK ? <ClipboardCheck size={16} /> : <Clipboard size={16} />}{copyOK || "Copy"}</button><Badge tone="info">Job: {short(jobId || "n/a", 12)}</Badge></div></div>{typeof resultData === "object" && Object.keys(resultData as Record<string, string>).length > 0 ? (<div className="flex-grow flex flex-col min-h-0"><div className="flex gap-2 mb-3 flex-wrap border-b border-border-color pb-2">{Object.keys(resultData as Record<string, string>).map((f) => (<button key={f} onClick={() => setActiveFile(f)} className={`btn btn-secondary btn-laser text-xs ${activeFile === f ? "bg-accent-primary text-white" : ""}`}><FileText size={14} /> {short(f, 24)}</button>))}</div><div className="flex-grow overflow-auto text-sm bg-code-editor rounded-md p-2">{tokenSaver ? (<ReactDiffViewer oldValue="" newValue={activeFileContent || ""} splitView={false} useDarkTheme={true} styles={{ diffContainer: { background: "transparent" } }} />) : (<SyntaxHighlighter language="python" style={atomOneDark} customStyle={{ background: "transparent", padding: 0 }} wrapLines={true} wrapLongLines={true}>{activeFileContent || ""}</SyntaxHighlighter>)}</div><div className="mt-3 flex gap-2"><button onClick={() => { if (!activeFile || !activeFileContent) return; const blob = new Blob([activeFileContent], { type: "text/plain" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = activeFile; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }} className="btn btn-secondary btn-laser flex items-center gap-2"><Download size={16} /> Download File</button><button onClick={() => { if (result?.sandbox_result) { alert("Sandbox result available — see report below."); } else { alert("No sandbox result available for this job."); } }} className="btn btn-secondary btn-laser flex items-center gap-2"><Cpu size={16} /> Check Sandbox</button></div></div>) : (<pre className="whitespace-pre-wrap flex-grow overflow-auto text-sm">{result.notice || "No code returned. Check analysis for details."}</pre>)}</div><div className="mt-3"><ReportCard title="Validation" report={(result as ResultShape).validator_report} /><ReportCard title="Sandbox" report={(result as ResultShape).sandbox_result} /></div></motion.div>)}{view === "idle" && (<motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="processing"><p>{status}</p></motion.div>)}</AnimatePresence></aside>
+      </aside>
     </main>
   );
 }
@@ -303,28 +1440,23 @@ export default function Home() {
   const [token, setToken] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
-
-  // 1. Add new state to hold the user's subscription tier.
   const [userTier, setUserTier] = useState<string | null>(null);
 
   const loadKeys = useCallback(async () => {
-    if (!token) {
-      setSavedKeys([]);
-      return;
-    }
+    if (!token) { setSavedKeys([]); return; }
     try {
-      const res = await fetch(`${BACKEND_URL}/api/keys`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${BACKEND_URL}/api/keys`, { 
+        headers: { Authorization: `Bearer ${token}` } 
+      });
       if (!res.ok) throw new Error("Could not fetch keys");
-
       const data = await res.json();
       setSavedKeys(data.keys || []);
-    } catch (e) {
-      console.error("Failed to load keys:", e);
-      setSavedKeys([]);
+    } catch (e) { 
+      console.error("Failed to load keys:", e); 
+      setSavedKeys([]); 
     }
   }, [token]);
 
-  // 2. Add a function to load the user's profile and tier from Supabase.
   const loadUserProfile = useCallback(async (userId: string) => {
     if (!userId) return;
     try {
@@ -333,128 +1465,101 @@ export default function Home() {
         .select('tier')
         .eq('id', userId)
         .single();
-
-      if (error) {
-        console.error("Could not find or fetch user profile:", error.message);
-        setUserTier("free"); // Default to 'free' as per your backend logic
-        return;
-      }
-
-      if (data) {
-        setUserTier(data.tier || "free");
-      }
-    } catch (e) {
-      console.error("Failed to load user profile:", e);
-      setUserTier("free"); // Default on any other error
+      if (error) { throw error; }
+      if (data) { setUserTier(data.tier || "free"); }
+    } catch (e) { 
+      console.error("Failed to load user profile:", e); 
+      setUserTier("free"); 
     }
   }, []);
 
   useEffect(() => {
-    if (token) {
-      loadKeys();
-    }
+    if (token) { loadKeys(); }
   }, [token, loadKeys]);
 
   useEffect(() => {
     const handleAuthChange = async (session: any) => {
-        setUser(session?.user ?? null);
-        setToken(session?.access_token ?? null);
-
-        // 3. When the user session loads or changes, fetch their tier.
-        if (session?.user) {
-          await loadUserProfile(session.user.id);
-        } else {
-          setUserTier(null); // Clear the tier when the user logs out.
-        }
+      setUser(session?.user ?? null);
+      setToken(session?.access_token ?? null);
+      if (session?.user) { 
+        await loadUserProfile(session.user.id); 
+      } else { 
+        setUserTier(null); 
+      }
     };
-
-    // Handle the initial session load
-    supabase.auth.getSession().then(({ data: { session } }) => {
-        handleAuthChange(session);
+    
+    supabase.auth.getSession().then(({ data: { session } }) => { 
+      handleAuthChange(session); 
     });
-
-    // Listen for future auth changes (sign in, sign out)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        handleAuthChange(session);
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { 
+      handleAuthChange(session); 
     });
-
-    return () => {
-      subscription?.unsubscribe();
-    };
+    
+    return () => { subscription?.unsubscribe(); };
   }, [loadUserProfile]);
-
-  // Helper function to determine badge style based on tier
-  const getTierBadgeProps = (tier: string | null) => {
-    const tierLower = tier?.toLowerCase();
-    switch (tierLower) {
-      case 'pro':
-        return { tone: 'info', children: 'Pro' };
-      case 'enterprise':
-        return { tone: 'success', children: 'Enterprise' };
-      default:
-        return { tone: 'default', children: 'Free' };
-    }
-  };
-
+  
   return (
-    <div className="app min-h-screen p-6">
-      <header className="app-header flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <h1 className="app-title text-xl font-bold flex items-center gap-2">
-              <span className="inline-block w-8 h-8 rounded bg-accent-primary flex items-center justify-center text-white">0</span>
-              Pirate
-            </h1>
-            <div className="text-sm text-text-secondary">Secure & Refactor Your Code with AI</div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {user ? (
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPanelOpen(true)} className="btn btn-secondary btn-laser rounded-full p-2">
-                <User size={16} />
-              </button>
-            </div>
-          ) : null}
-        </div>
+    <div className="min-h-screen flex flex-col gap-6 py-6 bg-gradient-to-br from-background-deep via-background-deep to-gray-900">
+      <header className="main-container app-header">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
+            0Pirate
+          </h1>
+          <p className="app-tagline">Secure & Refactor Your Code with AI</p>
+        </motion.div>
+        
+        {user && (
+          <motion.button 
+            onClick={() => setPanelOpen(true)} 
+            className="btn btn-secondary group"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <User size={16} className="group-hover:scale-110 transition-transform" /> 
+            Account
+          </motion.button>
+        )}
       </header>
 
-      {!user ? (
-        <AuthComponent />
-      ) : (
-        <Fragment>
-          <AnimatePresence>
-            {panelOpen && (
-              <motion.div key="panel" initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", stiffness: 300, damping: 30 }} className="fixed top-0 right-0 h-full w-full max-w-lg bg-background-dark shadow-2xl z-50 overflow-y-auto">
-                <div className="flex justify-between items-center p-4 border-b border-border-color">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold">Account</h3>
-
-                    {/* 4. Dynamically render the badge based on the fetched tier */}
-                    {userTier && (
-                      <Badge {...getTierBadgeProps(userTier)} />
-                    )}
-
+      <div className="main-container flex-grow">
+        {!user ? (
+          <AuthComponent />
+        ) : (
+          <Fragment>
+            <AnimatePresence>
+              {panelOpen && (
+                <motion.div 
+                  className="modal-backdrop"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setPanelOpen(false)}
+                >
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <AccountManager 
+                      token={token} 
+                      email={user?.email} 
+                      savedKeys={savedKeys} 
+                      onKeysChange={loadKeys}
+                      userTier={userTier}
+                      onClose={() => setPanelOpen(false)}
+                    />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setPanelOpen(false)} className="btn btn-secondary btn-laser p-2"><X size={16} /></button>
-                  </div>
-                </div>
-
-                <AccountManager
-                  token={token}
-                  email={user?.email}
-                  savedKeys={savedKeys}
-                  onKeysChange={loadKeys}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <MainApp token={token} savedKeys={savedKeys} />
-        </Fragment>
-      )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <MainApp token={token} savedKeys={savedKeys} />
+          </Fragment>
+        )}
+      </div>
     </div>
   );
 }
