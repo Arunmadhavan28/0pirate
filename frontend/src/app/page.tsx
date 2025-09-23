@@ -9,6 +9,8 @@ import {
   Trash2, X, ShieldCheck, FileText, Zap, HelpCircle, Code, Settings, Edit, ChevronLeft, Loader2
 } from "lucide-react";
 
+import LandingPage from "./landing_page";
+
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 
@@ -1566,7 +1568,13 @@ export default function Home() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
   const [userTier, setUserTier] = useState<string | null>(null);
+  const [showLanding, setShowLanding] = useState(true);
 
+
+  const handleNavigateToApp = () => { // 👈 **Step 3: Create the handler function**
+    setShowLanding(false);
+  };
+  
   const loadKeys = useCallback(async () => {
     if (!token) { setSavedKeys([]); return; }
     try {
@@ -1625,66 +1633,71 @@ export default function Home() {
   }, [loadUserProfile]);
   
   return (
-    <div className="min-h-screen flex flex-col gap-6 py-6 bg-gradient-to-br from-background-deep via-background-deep to-gray-900">
-      <header className="main-container app-header">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
+  <div className="min-h-screen flex flex-col gap-6 py-6 bg-gradient-to-br from-background-deep via-background-deep to-gray-900">
+    <header className="main-container app-header">
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.6 }}
+      >
+        <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
+          0Pirate
+        </h1>
+        <p className="app-tagline">Secure & Refactor Your Code with AI</p>
+      </motion.div>
+      
+      {user && (
+        <motion.button 
+          onClick={() => setPanelOpen(true)} 
+          className="btn btn-secondary group"
+          initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
-          <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
-            0Pirate
-          </h1>
-          <p className="app-tagline">Secure & Refactor Your Code with AI</p>
-        </motion.div>
-        
-        {user && (
-          <motion.button 
-            onClick={() => setPanelOpen(true)} 
-            className="btn btn-secondary group"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <User size={16} className="group-hover:scale-110 transition-transform" /> 
-            Account
-          </motion.button>
-        )}
-      </header>
+          <User size={16} className="group-hover:scale-110 transition-transform" /> 
+          Account
+        </motion.button>
+      )}
+    </header>
 
-      <div className="main-container flex-grow">
-        {!user ? (
-          <AuthComponent />
-        ) : (
-          <Fragment>
-            <AnimatePresence>
-              {panelOpen && (
-                <motion.div 
-                  className="modal-backdrop"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  onClick={() => setPanelOpen(false)}
-                >
-                  <div onClick={(e) => e.stopPropagation()}>
-                    <AccountManager 
-                      token={token} 
-                      email={user?.email} 
-                      savedKeys={savedKeys} 
-                      onKeysChange={loadKeys}
-                      userTier={userTier}
-                      onClose={() => setPanelOpen(false)}
-                    />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <MainApp token={token} savedKeys={savedKeys} />
-          </Fragment>
-        )}
-      </div>
+    <div className="main-container flex-grow">
+      {showLanding && !user ? (
+        // If showLanding is true AND there's no user, show the landing page
+        <LandingPage onNavigate={handleNavigateToApp} />
+      ) : !user ? (
+        // Otherwise, if there's no user, show the login component
+        <AuthComponent />
+      ) : (
+        // If there IS a user, show the main application
+        <Fragment>
+          <AnimatePresence>
+            {panelOpen && (
+              <motion.div 
+                className="modal-backdrop"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setPanelOpen(false)}
+              >
+                <div onClick={(e) => e.stopPropagation()}>
+                  <AccountManager 
+                    token={token} 
+                    email={user?.email} 
+                    savedKeys={savedKeys} 
+                    onKeysChange={loadKeys}
+                    userTier={userTier}
+                    onClose={() => setPanelOpen(false)}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <MainApp token={token} savedKeys={savedKeys} />
+        </Fragment>
+      )}
     </div>
-  );
+  </div>
+);
 }

@@ -529,5 +529,5 @@ fieldset {
 .toggle-active-info--green { color: var(--success-color); }
 .toggle-active-info--blue { color: var(--accent-primary); }
 
-/* In globals.css */
+/* --- Add these styles to your main CSS file --- */
 
