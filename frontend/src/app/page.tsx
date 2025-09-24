@@ -532,19 +532,10 @@ const OnboardingIdleView = () => {
       animate="animate"
       exit="exit"
     >
-      <motion.div
-        animate={{ 
-          scale: [1, 1.1, 1],
-          rotate: [0, 5, -5, 0]
-        }}
-        transition={{ 
-          duration: 4,
-          repeat: Infinity,
-          ease: "easeInOut"
-        }}
-      >
-        <Bot size={48} className="text-accent-primary" />
-      </motion.div>
+      {/* The static Bot icon is now replaced with the interactive one */}
+      <div className="mb-4">
+        <InteractiveBotIcon />
+      </div>
       
       <motion.h2
         className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent"
@@ -1300,14 +1291,11 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
 
   const language = getLanguageFromFileName(activeFile);
 
-
-   // ADD THIS FUNCTION
   const onDrop = useCallback((acceptedFiles: File[]) => { 
     setFiles(prevFiles => [...prevFiles, ...acceptedFiles]); 
     setInputMode("upload"); 
   }, []);
 
-  // AND ADD THIS HOOK CALL
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
   const success = useCallback((d: any) => {
@@ -1431,222 +1419,214 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
 
   return (
     <main className="content-grid">
-      <div className="left-pane">
-        <motion.div 
-          className="space-y-6"
-          variants={staggerContainer}
-          initial="initial"
-          animate="animate"
-        >
-          {/* Code Input Section */}
+      {/* FIXED: The left pane is now a flex column to make buttons sticky */}
+      <div className="left-pane flex flex-col gap-6">
+        
+        {/* This new wrapper contains all the scrollable content */}
+        <div className="flex-grow space-y-6 overflow-y-auto pr-2">
           <motion.div 
-            variants={fadeInUp}
+            className="space-y-6"
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
           >
-            <div className="flex gap-2 mb-4">
-                <motion.button 
-                    onClick={() => setInputMode('paste')}
-                    className={`btn flex-1 ${inputMode === 'paste' ? 'btn-primary' : 'btn-secondary'}`}
-                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                >
-                    Paste Code
-                </motion.button>
-                <motion.button 
-                    onClick={() => setInputMode('upload')}
-                    className={`btn flex-1 ${inputMode === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
-                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                >
-                    Upload Files / ZIP
-                </motion.button>
-            </div>
+            {/* Code Input Section */}
+            <motion.div variants={fadeInUp}>
+              <div className="flex gap-2 mb-4">
+                  <motion.button 
+                      onClick={() => setInputMode('paste')}
+                      className={`btn flex-1 ${inputMode === 'paste' ? 'btn-primary' : 'btn-secondary'}`}
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  >
+                      Paste Code
+                  </motion.button>
+                  <motion.button 
+                      onClick={() => setInputMode('upload')}
+                      className={`btn flex-1 ${inputMode === 'upload' ? 'btn-primary' : 'btn-secondary'}`}
+                      whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  >
+                      Upload Files / ZIP
+                  </motion.button>
+              </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Conditional Rendering for Paste vs Upload */}
-              {inputMode === 'paste' ? (
-                <div className="code-wrapper group lg:col-span-2">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {inputMode === 'paste' ? (
+                  <div className="code-wrapper group lg:col-span-2">
+                     <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
+                       <Clipboard size={16} />
+                       Paste Your Code
+                     </h4>
+                     <textarea 
+                       className="code-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
+                       placeholder="Paste your buggy code here..." 
+                       value={pastedCode} 
+                       onChange={(e) => setPastedCode(e.target.value)} 
+                     />
+                  </div>
+                ) : (
+                  <div 
+                      {...getRootProps()} 
+                      className={`code-wrapper group flex flex-col items-center justify-center text-center border-dashed border-2 hover:border-accent-primary transition-all cursor-pointer ${isDragActive ? 'border-accent-primary' : 'border-border-primary'}`}
+                  >
+                      <input {...getInputProps()} />
+                      <Bot size={32} className="text-text-secondary mb-4" />
+                      <p className="font-semibold">{isDragActive ? "Drop files now..." : "Drag & drop files or a .zip here"}</p>
+                      <p className="text-sm text-text-secondary">or click to select files</p>
+                      {files.length > 0 && (
+                          <div className="mt-4 text-left w-full">
+                              <h5 className="font-semibold text-xs uppercase text-text-secondary">Selected Files:</h5>
+                              <ul className="text-sm space-y-1 mt-2">
+                                  {files.map(file => (
+                                      <li key={file.name} className="truncate">- {file.name}</li>
+                                  ))}
+                              </ul>
+                          </div>
+                      )}
+                  </div>
+                )}
+
+                <div className="code-wrapper group lg:col-start-2">
                    <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
-                     <Clipboard size={16} />
-                     Paste Your Code
+                     <Terminal size={16} />
+                     Terminal Log
                    </h4>
                    <textarea 
-                     className="code-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
-                     placeholder="Paste your buggy code here..." 
-                     value={pastedCode} 
-                     onChange={(e) => setPastedCode(e.target.value)} 
+                     className="terminal-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
+                     placeholder="Paste terminal output, stack traces, errors here..." 
+                     value={errorLog} 
+                     onChange={(e) => setErrorLog(e.target.value)} 
                    />
                 </div>
-              ) : (
-                <div 
-                    {...getRootProps()} 
-                    className={`code-wrapper group flex flex-col items-center justify-center text-center border-dashed border-2 hover:border-accent-primary transition-all cursor-pointer ${isDragActive ? 'border-accent-primary' : 'border-border-primary'}`}
+              </div>
+            </motion.div>
+
+            {/* Task Selection */}
+            <motion.div className="card space-y-6" variants={fadeInUp}>
+              <div className="space-y-3">
+                <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
+                  <Settings size={16} />
+                  Task Selection
+                </label>
+                <select 
+                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                  value={task} 
+                  onChange={(e) => setTask(e.target.value)}
                 >
-                    <input {...getInputProps()} />
-                    <Bot size={32} className="text-text-secondary mb-4" />
-                    <p className="font-semibold">{isDragActive ? "Drop files now..." : "Drag & drop files or a .zip here"}</p>
-                    <p className="text-sm text-text-secondary">or click to select files</p>
-                    {files.length > 0 && (
-                        <div className="mt-4 text-left w-full">
-                            <h5 className="font-semibold text-xs uppercase text-text-secondary">Selected Files:</h5>
-                            <ul className="text-sm space-y-1 mt-2">
-                                {files.map(file => (
-                                    <li key={file.name} className="truncate">- {file.name}</li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
+                  {taskOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text-secondary">Provider</label>
+                  <select 
+                    className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                    value={provider} 
+                    onChange={(e) => setProvider(e.target.value)}
+                  >
+                    {Object.keys(MODEL_OPTIONS).map((p) => (
+                      <option key={p} value={p} className="capitalize">{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text-secondary">Model</label>
+                  <select 
+                    className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                    value={model} 
+                    onChange={(e) => setModel(e.target.value)} 
+                    disabled={(MODEL_OPTIONS[provider] || []).length <= 1}
+                  >
+                    {(MODEL_OPTIONS[provider] || []).map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {provider !== 'auto' && provider !== 'ollama' && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text-secondary">API Key</label>
+                  <select 
+                    className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                    value={selectedKeyName} 
+                    onChange={(e) => setSelectedKeyName(e.target.value)} 
+                    disabled={savedKeys.filter(k => k.provider === provider).length === 0}
+                  >
+                    {savedKeys.filter(k => k.provider === provider).length === 0 ? 
+                      (<option value="">No keys saved for {provider}</option>) : 
+                      (savedKeys.filter(key => key.provider === provider).map((key) => (
+                        <option key={key.name} value={key.name}>{key.name}</option>
+                      )))
+                    }
+                  </select>
                 </div>
               )}
+            </motion.div>
 
-              <div className="code-wrapper group lg:col-start-2">
-                 <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
-                   <Terminal size={16} />
-                   Terminal Log
-                 </h4>
-                 <textarea 
-                   className="terminal-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all" 
-                   placeholder="Paste terminal output, stack traces, errors here..." 
-                   value={errorLog} 
-                   onChange={(e) => setErrorLog(e.target.value)} 
-                 />
-              </div>
-            </div>
+            {/* Settings Toggles */}
+            <motion.div className="card space-y-4" variants={fadeInUp}>
+               <h4 className="flex items-center gap-3 font-semibold text-text-primary">
+                  <ShieldCheck size={18}/> Privacy & Security
+               </h4>
+               <ToggleSwitch 
+                 label="Max Security" 
+                 description="Zero-knowledge processing." 
+                 activeInfo="Secure mode activated - All data is abstracted."
+                 accentColor="green"
+                 checked={maxSecurity} 
+                 onChange={setMaxSecurity} 
+                 icon={ShieldCheck} 
+               />
+               <ToggleSwitch 
+                 label="Token Saver (DIFF)" 
+                 description="Output changes only." 
+                 activeInfo="Optimizing token usage for efficiency."
+                 accentColor="blue"
+                 checked={tokenSaver} 
+                 onChange={setTokenSaver} 
+                 icon={Zap} 
+               />
+            </motion.div>
           </motion.div>
-
-          {/* Task Selection */}
-          <motion.div 
-            className="card space-y-6"
-            variants={fadeInUp}
+        </div>
+        
+        {/* The action buttons are now outside the scrolling container, making them 'sticky' */}
+        <motion.div 
+          className="grid grid-cols-2 gap-4 flex-shrink-0"
+          variants={fadeInUp}
+        >
+          <motion.button 
+            onClick={submit} 
+            disabled={view === "loading"} 
+            className={`btn btn-primary w-full ${view === "loading" ? "btn-loading" : ""}`}
+            whileHover={{ scale: view === "loading" ? 1 : 1.02 }}
+            whileTap={{ scale: view === "loading" ? 1 : 0.98 }}
           >
-            <div className="space-y-3">
-              <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
-                <Settings size={16} />
-                Task Selection
-              </label>
-              <select 
-                className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                value={task} 
-                onChange={(e) => setTask(e.target.value)}
-              >
-                {taskOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text-secondary">Provider</label>
-                <select 
-                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                  value={provider} 
-                  onChange={(e) => setProvider(e.target.value)}
-                >
-                  {Object.keys(MODEL_OPTIONS).map((p) => (
-                    <option key={p} value={p} className="capitalize">{p}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text-secondary">Model</label>
-                <select 
-                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                  value={model} 
-                  onChange={(e) => setModel(e.target.value)} 
-                  disabled={(MODEL_OPTIONS[provider] || []).length <= 1}
-                >
-                  {(MODEL_OPTIONS[provider] || []).map((m) => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            
-            {provider !== 'auto' && provider !== 'ollama' && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-text-secondary">API Key</label>
-                <select 
-                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                  value={selectedKeyName} 
-                  onChange={(e) => setSelectedKeyName(e.target.value)} 
-                  disabled={savedKeys.filter(k => k.provider === provider).length === 0}
-                >
-                  {savedKeys.filter(k => k.provider === provider).length === 0 ? 
-                    (<option value="">No keys saved for {provider}</option>) : 
-                    (savedKeys.filter(key => key.provider === provider).map((key) => (
-                      <option key={key.name} value={key.name}>{key.name}</option>
-                    )))
-                  }
-                </select>
-              </div>
+            {view === "loading" ? (
+              <>
+                <LoadingSpinner size={16} />
+                Running Analysis...
+              </>
+            ) : (
+              <>
+                <Zap size={16} />
+                Run Analysis
+              </>
             )}
-          </motion.div>
-
-          {/* Settings Toggles */}
-          <motion.div 
-            className="card space-y-4"
-            variants={fadeInUp}
+          </motion.button>
+          
+          <motion.button 
+            onClick={resetAll} 
+            className="btn btn-secondary w-full"
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
           >
-             <h4 className="flex items-center gap-3 font-semibold text-text-primary">
-                <ShieldCheck size={18}/> Privacy & Security
-             </h4>
-             <ToggleSwitch 
-               label="Max Security" 
-               description="Zero-knowledge processing." 
-               activeInfo="Secure mode activated - All data is abstracted."
-               accentColor="green"
-               checked={maxSecurity} 
-               onChange={setMaxSecurity} 
-               icon={ShieldCheck} 
-             />
-             <ToggleSwitch 
-               label="Token Saver (DIFF)" 
-               description="Output changes only." 
-               activeInfo="Optimizing token usage for efficiency."
-               accentColor="blue"
-               checked={tokenSaver} 
-               onChange={setTokenSaver} 
-               icon={Zap} 
-             />
-          </motion.div>
-
-          {/* Action Buttons - DEFINITIVE FIX */}
-          <motion.div 
-  className="grid grid-cols-2 gap-4"
-  variants={fadeInUp}
->
-    {/* Button 1: Run Analysis */}
-    <motion.button 
-      onClick={submit} 
-      disabled={view === "loading"} 
-      className={`btn btn-primary w-full ${view === "loading" ? "btn-loading" : ""}`}
-      whileHover={{ scale: view === "loading" ? 1 : 1.02 }}
-      whileTap={{ scale: view === "loading" ? 1 : 0.98 }}
-    >
-      {view === "loading" ? (
-        <>
-          <LoadingSpinner size={16} />
-          Running Analysis...
-        </>
-      ) : (
-        <>
-          <Zap size={16} />
-          Run Analysis
-        </>
-      )}
-    </motion.button>
-    
-    {/* Button 2: Reset */}
-    <motion.button 
-      onClick={resetAll} 
-      className="btn btn-secondary w-full"
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-    >
-      <X size={16} />
-      Reset
-    </motion.button>
-</motion.div>
+            <X size={16} />
+            Reset
+          </motion.button>
         </motion.div>
       </div>
       
@@ -1749,7 +1729,6 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
                          </motion.button>
                       </div>
 
-                      {/* NEW: File Navigator Tabs */}
                       {typeof resultData === 'object' && Object.keys(resultData).length > 1 && (
                         <div className="flex gap-2 mb-3 border-b border-border-primary pb-2 flex-wrap">
                           {Object.keys(resultData).map(filename => (
@@ -1765,7 +1744,7 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
                       )}
                       <div className="code-output-wrapper flex-grow rounded-lg bg-code-editor border border-border-primary p-4 overflow-auto">
                         <SyntaxHighlighter 
-                          language={language}  // You can make this dynamic if you handle multiple languages
+                          language={language}
                           style={atomOneDark} 
                           wrapLines={true} 
                           wrapLongLines={true}
@@ -1783,7 +1762,6 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
     </main>
   );
 }
-
 /*-------------------------------------------------
    Top-level Home wrapper
 ---------------------------------------------------*/
@@ -1793,11 +1771,8 @@ export default function Home() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
   const [userTier, setUserTier] = useState<string | null>(null);
-  
-  // State to manage whether to show the landing or auth page for non-logged-in users
   const [currentView, setCurrentView] = useState<'landing' | 'auth'>('landing');
 
-  // This function is passed to the landing page to switch the view to the auth page
   const handleNavigateToAuth = () => {
     setCurrentView('auth');
   };
@@ -1845,7 +1820,7 @@ export default function Home() {
         await loadUserProfile(session.user.id); 
       } else { 
         setUserTier(null); 
-        setCurrentView('landing'); // Reset to landing page on logout
+        setCurrentView('landing'); 
       }
     };
     
@@ -1862,6 +1837,8 @@ export default function Home() {
   
   return (
   <div className="min-h-screen flex flex-col bg-background-deep relative">
+    <InteractiveBackground />
+    {/* FIXED: Style block moved to ensure z-index is correct */}
     <style>{`
       body::before {
         content: '';
@@ -1873,11 +1850,12 @@ export default function Home() {
           transparent 80%
         );
         pointer-events: none;
-        z-index: -1;
+        z-index: 0; /* Ensures light is behind content */
       }
     `}</style>
     
-    <header className="main-container app-header py-6 flex justify-between items-center">
+    {/* FIXED: All UI content is given a z-index to be above the background light */}
+    <header className="main-container app-header py-6 flex justify-between items-center relative z-10">
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
@@ -1905,9 +1883,8 @@ export default function Home() {
       )}
     </header>
 
-    <div className="main-container flex-grow flex flex-col">
+    <div className="main-container flex-grow flex flex-col relative z-10">
       {user ? (
-        // If there IS a user, show the main application
         <Fragment>
           <AnimatePresence>
             {panelOpen && (
@@ -1934,10 +1911,8 @@ export default function Home() {
           <MainApp token={token} savedKeys={savedKeys} />
         </Fragment>
       ) : currentView === 'landing' ? (
-        // If no user and view is 'landing', show the LandingPage
         <LandingPage onNavigate={handleNavigateToAuth} />
       ) : (
-        // If no user and view is 'auth', show the AuthComponent
         <AuthComponent />
       )}
     </div>
