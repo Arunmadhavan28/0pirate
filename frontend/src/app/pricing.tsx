@@ -66,7 +66,6 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
   
   const developerCardRef = useRef<HTMLDivElement>(null);
   const glowEffect = useCursorGlow(developerCardRef);
-  const professionalGlowEffect = useCursorGlow(professionalCardRef);
 
   useEffect(() => {
     const fetchAndFormatPlans = async () => {
@@ -190,24 +189,18 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
   const allPlans = [...plans, enterprisePlan];
 
   return (
-    <div className="w-full bg-gradient-to-br from-gray-900 via-black to-gray-800 py-16 px-4">
+    <div className="w-full min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 py-20 px-4">
       <style jsx>{`
         .pricing-container {
-          max-width: 1600px;
+          max-width: 1400px;
           margin: 0 auto;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
         }
 
         .pricing-grid {
           display: grid;
           grid-template-columns: 1fr;
-          gap: 2rem;
-          margin-top: 4rem;
-          width: 100%;
-          max-width: 1400px;
-          justify-items: center;
+          gap: 1.5rem;
+          margin-top: 3rem;
         }
 
         @media (min-width: 640px) {
@@ -217,10 +210,9 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
           }
         }
 
-        @media (min-width: 1200px) {
+        @media (min-width: 1024px) {
           .pricing-grid {
             grid-template-columns: repeat(4, 1fr);
-            gap: 2.5rem;
           }
         }
 
@@ -234,74 +226,14 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
           will-change: transform, box-shadow;
           transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
           overflow: hidden;
-          width: 100%;
-          max-width: 320px;
-          height: auto;
-          min-height: 650px;
-          display: flex;
-          flex-direction: column;
         }
 
-        /* Header Styles */
-        .header-section {
-          text-align: center;
-          margin-bottom: 3rem;
-          max-width: 800px;
-        }
-
-        .main-title {
-          font-size: 3.5rem;
-          font-weight: 800;
-          background: linear-gradient(135deg, #ffffff, #e5e7eb, #9ca3af);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-          margin-bottom: 1.5rem;
-          line-height: 1.1;
-        }
-
-        @media (min-width: 768px) {
-          .main-title {
-            font-size: 4.5rem;
-          }
-        }
-
-        @media (min-width: 1024px) {
-          .main-title {
-            font-size: 5.5rem;
-          }
-        }
-
-        .subtitle {
-          font-size: 1.25rem;
-          color: #9ca3af;
-          line-height: 1.6;
-          max-width: 600px;
-          margin: 0 auto;
-        }
-
-        @media (min-width: 768px) {
-          .subtitle {
-            font-size: 1.5rem;
-          }
-        }
         .plan-card:hover {
           transform: translateY(-8px) scale(1.02);
           box-shadow: 
             0 25px 50px -12px rgba(0, 0, 0, 0.8),
             0 0 0 1px rgba(255, 255, 255, 0.1);
           border-color: #555;
-        }
-
-        .card-content {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-        }
-
-        .features-section {
-          flex: 1;
-          margin: 2rem 0;
         }
 
         .developer-card {
@@ -319,116 +251,23 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
           bottom: 0;
           border-radius: 24px;
           background: radial-gradient(
-            circle 500px at var(--mouse-x, 50%) var(--mouse-y, 50%),
-            rgba(59, 130, 246, 0.2) 0%,
-            rgba(147, 197, 253, 0.1) 25%,
-            rgba(59, 130, 246, 0.08) 50%,
-            transparent 80%
+            circle 400px at var(--mouse-x, 50%) var(--mouse-y, 50%),
+            rgba(59, 130, 246, 0.15) 0%,
+            rgba(59, 130, 246, 0.08) 40%,
+            transparent 70%
           );
           opacity: 0;
-          transition: opacity 0.4s ease;
+          transition: opacity 0.3s ease;
           pointer-events: none;
         }
 
         .developer-card:hover::before {
           opacity: 1;
-          background: radial-gradient(
-            circle 600px at var(--mouse-x, 50%) var(--mouse-y, 50%),
-            rgba(59, 130, 246, 0.3) 0%,
-            rgba(147, 197, 253, 0.15) 25%,
-            rgba(59, 130, 246, 0.1) 50%,
-            transparent 80%
-          );
-        }
-
-        .developer-card::after {
-          content: '';
-          position: absolute;
-          top: -2px;
-          left: -2px;
-          right: -2px;
-          bottom: -2px;
-          border-radius: 26px;
-          background: linear-gradient(
-            45deg,
-            rgba(59, 130, 246, 0.6),
-            rgba(147, 197, 253, 0.3),
-            rgba(59, 130, 246, 0.6),
-            rgba(147, 197, 253, 0.3)
-          );
-          background-size: 300% 300%;
-          z-index: -1;
-          opacity: 0;
-          transition: opacity 0.4s ease;
-          animation: laserBorder 3s ease-in-out infinite;
-        }
-
-        .developer-card:hover::after {
-          opacity: 1;
-        }
-
-        @keyframes laserBorder {
-          0%, 100% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
         }
 
         .professional-card {
           border: 2px solid #10b981;
           background: linear-gradient(145deg, #064e3b, #022c22);
-          position: relative;
-        }
-
-        .professional-card::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          border-radius: 24px;
-          background: radial-gradient(
-            circle 400px at var(--mouse-x, 50%) var(--mouse-y, 50%),
-            rgba(16, 185, 129, 0.15) 0%,
-            rgba(52, 211, 153, 0.08) 40%,
-            transparent 70%
-          );
-          opacity: 0;
-          transition: opacity 0.4s ease;
-          pointer-events: none;
-        }
-
-        .professional-card:hover::before {
-          opacity: 1;
-        }
-
-        .plan-card:hover .card-icon {
-          transform: scale(1.1) rotate(5deg);
-          filter: drop-shadow(0 0 20px currentColor);
-        }
-
-        .card-icon {
-          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .feature-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 12px;
-          padding: 10px 0;
-          border-bottom: 1px solid rgba(75, 85, 99, 0.1);
-          transition: all 0.3s ease;
-        }
-
-        .feature-item:hover {
-          padding-left: 8px;
-          background: rgba(75, 85, 99, 0.05);
-          border-radius: 8px;
-          border-bottom-color: rgba(75, 85, 99, 0.2);
-        }
-
-        .feature-item:hover .feature-icon {
-          transform: scale(1.2);
-          filter: drop-shadow(0 0 8px currentColor);
         }
 
         .toggle-container {
@@ -502,64 +341,34 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
           border-radius: 12px;
           font-weight: 600;
           font-size: 16px;
-          transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
           border: none;
           cursor: pointer;
           position: relative;
           overflow: hidden;
         }
 
-        .btn::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(255, 255, 255, 0.2),
-            transparent
-          );
-          transition: left 0.6s;
-        }
-
-        .btn:hover::before {
-          left: 100%;
-        }
-
         .btn-primary {
-          background: linear-gradient(135deg, #3b82f6, #1d4ed8, #6366f1);
+          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
           color: white;
-          box-shadow: 
-            0 8px 25px rgba(59, 130, 246, 0.4),
-            0 0 20px rgba(59, 130, 246, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.1);
+          box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
         }
 
         .btn-primary:hover {
-          transform: translateY(-3px) scale(1.02);
-          box-shadow: 
-            0 15px 40px rgba(59, 130, 246, 0.6),
-            0 0 30px rgba(59, 130, 246, 0.4);
-          background: linear-gradient(135deg, #4f46e5, #3b82f6, #8b5cf6);
+          transform: translateY(-2px);
+          box-shadow: 0 8px 25px 0 rgba(59, 130, 246, 0.6);
         }
 
         .btn-secondary {
           background: linear-gradient(145deg, #374151, #1f2937);
           color: white;
           border: 1px solid #4b5563;
-          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
         }
 
         .btn-secondary:hover {
-          transform: translateY(-3px) scale(1.02);
+          transform: translateY(-2px);
           background: linear-gradient(145deg, #4b5563, #374151);
-          box-shadow: 
-            0 12px 30px rgba(0, 0, 0, 0.4),
-            0 0 20px rgba(75, 85, 99, 0.3);
-          border-color: #6b7280;
+          box-shadow: 0 8px 25px 0 rgba(0, 0, 0, 0.3);
         }
 
         .popular-badge {
@@ -567,48 +376,29 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
           top: -1px;
           left: 50%;
           transform: translateX(-50%);
-          background: linear-gradient(135deg, #3b82f6, #1d4ed8, #6366f1);
+          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
           color: white;
-          padding: 10px 28px;
-          border-radius: 0 0 16px 16px;
+          padding: 8px 24px;
+          border-radius: 0 0 12px 12px;
           font-size: 14px;
           font-weight: 700;
           z-index: 20;
-          box-shadow: 
-            0 8px 25px rgba(59, 130, 246, 0.4),
-            0 0 20px rgba(59, 130, 246, 0.3),
-            inset 0 1px 0 rgba(255, 255, 255, 0.2);
-          animation: popularPulse 3s ease-in-out infinite;
-        }
-
-        @keyframes popularPulse {
-          0%, 100% { box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4), 0 0 20px rgba(59, 130, 246, 0.3); }
-          50% { box-shadow: 0 8px 35px rgba(59, 130, 246, 0.6), 0 0 30px rgba(59, 130, 246, 0.5); }
+          box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
         }
 
         .savings-badge {
           position: absolute;
-          top: -8px;
-          right: -8px;
-          background: linear-gradient(135deg, #f59e0b, #d97706, #b45309);
+          top: -12px;
+          right: -12px;
+          background: linear-gradient(135deg, #10b981, #059669);
           color: white;
-          padding: 12px 20px;
-          border-radius: 25px;
-          font-size: 13px;
-          font-weight: 800;
-          transform: rotate(15deg);
+          padding: 8px 16px;
+          border-radius: 50px;
+          font-size: 12px;
+          font-weight: 700;
+          transform: rotate(12deg);
           z-index: 30;
-          box-shadow: 
-            0 8px 25px rgba(245, 158, 11, 0.4),
-            0 0 20px rgba(245, 158, 11, 0.3),
-            inset 0 1px 0 rgba(255, 255, 255, 0.3);
-          border: 2px solid rgba(255, 255, 255, 0.2);
-          animation: savingsBounce 2s ease-in-out infinite;
-        }
-
-        @keyframes savingsBounce {
-          0%, 100% { transform: rotate(15deg) scale(1); }
-          50% { transform: rotate(15deg) scale(1.05); }
+          box-shadow: 0 4px 14px 0 rgba(16, 185, 129, 0.4);
         }
       `}</style>
 
@@ -618,12 +408,12 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: "easeOut" }}
-          className="header-section"
+          className="text-center"
         >
-          <h1 className="main-title">
+          <h1 className="text-5xl md:text-7xl font-bold bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent mb-6">
             Plans & Pricing
           </h1>
-          <p className="subtitle">
+          <p className="text-xl md:text-2xl text-gray-400 max-w-3xl mx-auto leading-relaxed">
             Start for free, then scale up with higher limits and advanced team features
           </p>
         </motion.div>
@@ -670,13 +460,12 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
             <AnimatePresence>
               {billingCycle === 'yearly' && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.8, rotate: -15 }}
-                  animate={{ opacity: 1, scale: 1, rotate: 15 }}
-                  exit={{ opacity: 0, scale: 0.8, rotate: -15 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                  initial={{ opacity: 0, scale: 0.8, rotate: -10 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 12 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
                   className="savings-badge"
                 >
-                  💰 Save 17%
+                  Save 17%
                 </motion.div>
               )}
             </AnimatePresence>
@@ -700,110 +489,108 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
               } ${
                 plan.highlight ? 'professional-card' : ''
               }`}
-              ref={plan.id === 'developer' ? developerCardRef : plan.highlight ? professionalCardRef : null}
-              {...(plan.id === 'developer' ? glowEffect : plan.highlight ? professionalGlowEffect : {})}
+              ref={plan.id === 'developer' ? developerCardRef : null}
+              {...(plan.id === 'developer' ? glowEffect : {})}
             >
               {plan.popular && (
                 <div className="popular-badge">
                   Most Popular
                 </div>
               )}
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`p-3 rounded-xl card-icon ${
-                    plan.id === 'developer' ? 'bg-blue-500/20 text-blue-400' :
-                    plan.highlight ? 'bg-emerald-500/20 text-emerald-400' :
-                    'bg-gray-500/20 text-gray-400'
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`p-3 rounded-xl ${
+                  plan.id === 'developer' ? 'bg-blue-500/20 text-blue-400' :
+                  plan.highlight ? 'bg-emerald-500/20 text-emerald-400' :
+                  'bg-gray-500/20 text-gray-400'
+                }`}>
+                  {plan.icon}
+                </div>
+                <div>
+                  <h3 className={`text-2xl font-bold ${
+                    plan.id === 'developer' ? 'text-blue-400' :
+                    plan.highlight ? 'text-emerald-400' :
+                    'text-white'
                   }`}>
-                    {plan.icon}
-                  </div>
-                  <div>
-                    <h3 className={`text-2xl font-bold ${
-                      plan.id === 'developer' ? 'text-blue-400' :
-                      plan.highlight ? 'text-emerald-400' :
-                      'text-white'
-                    }`}>
-                      {plan.name}
-                    </h3>
-                  </div>
+                    {plan.name}
+                  </h3>
                 </div>
+              </div>
 
-                <p className="text-gray-400 mb-6 text-base leading-relaxed">
-                  {plan.description}
-                </p>
+              <p className="text-gray-400 mb-8 text-lg leading-relaxed">
+                {plan.description}
+              </p>
 
-                <div className="mb-6">
-                  {plan.id === 'enterprise' ? (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-bold text-white">Custom</span>
-                      <span className="text-gray-400">pricing</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-4xl font-bold text-white">
-                        {plan.id === 'free' ? 
-                          '₹0' : 
-                          formatPrice(
-                            billingCycle === 'monthly' ? plan.monthly.price : plan.yearly.price, 
-                            plan.currency
-                          )
-                        }
+              <div className="mb-8">
+                {plan.id === 'enterprise' ? (
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-4xl font-bold text-white">Custom</span>
+                    <span className="text-gray-400">pricing</span>
+                  </div>
+                ) : (
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-5xl font-bold text-white">
+                      {plan.id === 'free' ? 
+                        '₹0' : 
+                        formatPrice(
+                          billingCycle === 'monthly' ? plan.monthly.price : plan.yearly.price, 
+                          plan.currency
+                        )
+                      }
+                    </span>
+                    {plan.id !== 'free' && (
+                      <span className="text-gray-400 text-lg">
+                        /{billingCycle === 'monthly' ? 'month' : 'year'}
                       </span>
-                      {plan.id !== 'free' && (
-                        <span className="text-gray-400 text-base">
-                          /{billingCycle === 'monthly' ? 'month' : 'year'}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
-                <div className="features-section">
-                  <ul className="feature-list">
-                    {plan.features.map((feature: string, i: number) => (
-                      <li key={i} className="feature-item">
-                        <Check className="w-5 h-5 feature-icon" />
-                        <span className="text-gray-300 text-sm leading-relaxed">
-                          {feature}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+              <ul className="feature-list">
+                {plan.features.map((feature: string, i: number) => (
+                  <li key={i} className="feature-item">
+                    <Check className="w-5 h-5 feature-icon" />
+                    <span className="text-gray-300 text-sm leading-relaxed">
+                      {feature}
+                    </span>
+                  </li>
+                ))}
+              </ul>
 
-                <div className="mt-auto">
-                  {plan.id === 'free' && (
-                    <button 
-                      onClick={onSelectFreePlan} 
-                      className="btn btn-secondary"
-                    >
-                      Get Started Free
-                    </button>
-                  )}
-                  {plan.id === 'developer' && (
-                    <button 
-                      onClick={() => onSelectPaidPlan(plan.id, billingCycle)} 
-                      className="btn btn-primary"
-                    >
-                      Choose Developer
-                    </button>
-                  )}
-                  {plan.id === 'professional' && (
-                    <button 
-                      onClick={() => onSelectPaidPlan(plan.id, billingCycle)} 
-                      className="btn btn-secondary"
-                    >
-                      Choose Professional
-                    </button>
-                  )}
-                  {plan.id === 'enterprise' && (
-                    <button 
-                      onClick={() => window.open('mailto:sales@example.com', '_blank')} 
-                      className="btn btn-secondary"
-                    >
-                      Contact Sales
-                    </button>
-                  )}
-                </div>
+              <div className="mt-8">
+                {plan.id === 'free' && (
+                  <button 
+                    onClick={onSelectFreePlan} 
+                    className="btn btn-secondary"
+                  >
+                    Get Started Free
+                  </button>
+                )}
+                {plan.id === 'developer' && (
+                  <button 
+                    onClick={() => onSelectPaidPlan(plan.id, billingCycle)} 
+                    className="btn btn-primary"
+                  >
+                    Choose Developer
+                  </button>
+                )}
+                {plan.id === 'professional' && (
+                  <button 
+                    onClick={() => onSelectPaidPlan(plan.id, billingCycle)} 
+                    className="btn btn-secondary"
+                  >
+                    Choose Professional
+                  </button>
+                )}
+                {plan.id === 'enterprise' && (
+                  <button 
+                    onClick={() => window.open('mailto:sales@example.com', '_blank')} 
+                    className="btn btn-secondary"
+                  >
+                    Contact Sales
+                  </button>
+                )}
               </div>
             </motion.div>
           ))}

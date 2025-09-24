@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import LandingPage from "./landing_page";
+import PricingPage from "./pricing";
 
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
@@ -1771,9 +1772,26 @@ export default function Home() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
   const [userTier, setUserTier] = useState<string | null>(null);
-  const [currentView, setCurrentView] = useState<'landing' | 'auth'>('landing');
+  
+  // State now manages landing, pricing, and auth views
+  const [currentView, setCurrentView] = useState<'landing' | 'pricing' | 'auth'>('landing');
 
-  const handleNavigateToAuth = () => {
+  // Navigate from Landing to Pricing
+  const handleNavigateToPricing = () => {
+    setCurrentView('pricing');
+  };
+
+  // On the pricing page, if the user selects the Free plan, navigate to auth
+  const handleSelectFreePlan = () => {
+    setCurrentView('auth');
+  };
+
+  // On the pricing page, if the user selects a Paid plan, start the payment flow
+  const handleSelectPaidPlan = (planId: string, billingCycle: 'monthly' | 'yearly') => {
+    console.log(`Starting payment for plan: ${planId} (${billingCycle})`);
+    // --- THIS IS WHERE YOU WILL TRIGGER THE RAZORPAY FLOW ---
+    // For now, we'll navigate to the auth page as a placeholder.
+    // In the future, you'll call your backend's /api/create-order here.
     setCurrentView('auth');
   };
   
@@ -1820,7 +1838,7 @@ export default function Home() {
         await loadUserProfile(session.user.id); 
       } else { 
         setUserTier(null); 
-        setCurrentView('landing'); 
+        setCurrentView('landing'); // Reset to landing page on logout
       }
     };
     
@@ -1835,56 +1853,9 @@ export default function Home() {
     return () => { subscription?.unsubscribe(); };
   }, [loadUserProfile]);
   
-  return (
-  <div className="min-h-screen flex flex-col bg-background-deep relative">
-    <InteractiveBackground />
-    {/* FIXED: Style block moved to ensure z-index is correct */}
-    <style>{`
-      body::before {
-        content: '';
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: radial-gradient(
-          circle 600px at var(--mouse-x, 50%) var(--mouse-y, 50%),
-          rgba(74, 144, 226, 0.1),
-          transparent 80%
-        );
-        pointer-events: none;
-        z-index: 0; /* Ensures light is behind content */
-      }
-    `}</style>
-    
-    {/* FIXED: All UI content is given a z-index to be above the background light */}
-    <header className="main-container app-header py-6 flex justify-between items-center relative z-10">
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.6 }}
-      >
-        <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
-          0Pirate
-        </h1>
-        <p className="app-tagline">Secure & Refactor Your Code with AI</p>
-      </motion.div>
-      
-      {user && (
-        <motion.button 
-          onClick={() => setPanelOpen(true)} 
-          className="btn btn-secondary group"
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          <User size={16} className="group-hover:scale-110 transition-transform" /> 
-          Account
-        </motion.button>
-      )}
-    </header>
-
-    <div className="main-container flex-grow flex flex-col relative z-10">
-      {user ? (
+  const renderView = () => {
+    if (user) {
+      return (
         <Fragment>
           <AnimatePresence>
             {panelOpen && (
@@ -1910,12 +1881,70 @@ export default function Home() {
           </AnimatePresence>
           <MainApp token={token} savedKeys={savedKeys} />
         </Fragment>
-      ) : currentView === 'landing' ? (
-        <LandingPage onNavigate={handleNavigateToAuth} />
-      ) : (
-        <AuthComponent />
-      )}
+      );
+    }
+
+    switch (currentView) {
+      case 'landing':
+        return <LandingPage onNavigate={handleNavigateToPricing} />;
+      case 'pricing':
+        return <PricingPage onSelectFreePlan={handleSelectFreePlan} onSelectPaidPlan={handleSelectPaidPlan} />;
+      case 'auth':
+        return <AuthComponent />;
+      default:
+        return <LandingPage onNavigate={handleNavigateToPricing} />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col bg-background-deep relative">
+      <InteractiveBackground />
+      <style>{`
+        body::before {
+          content: '';
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: radial-gradient(
+            circle 600px at var(--mouse-x, 50%) var(--mouse-y, 50%),
+            rgba(74, 144, 226, 0.1),
+            transparent 80%
+          );
+          pointer-events: none;
+          z-index: -1;
+        }
+      `}</style>
+      
+      <header className="main-container app-header py-6 flex justify-between items-center">
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6 }}
+        >
+          <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
+            0Pirate
+          </h1>
+          <p className="app-tagline">Secure & Refactor Your Code with AI</p>
+        </motion.div>
+        
+        {user && (
+          <motion.button 
+            onClick={() => setPanelOpen(true)} 
+            className="btn btn-secondary group"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <User size={16} className="group-hover:scale-110 transition-transform" /> 
+            Account
+          </motion.button>
+        )}
+      </header>
+
+      <div className="main-container flex-grow flex flex-col">
+        {renderView()}
+      </div>
     </div>
-  </div>
-);
+  );
 }

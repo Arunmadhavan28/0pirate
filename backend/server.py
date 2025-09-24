@@ -68,9 +68,10 @@ async def get_current_user(req: Request) -> dict:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 TIER_LIMITS = {
-    "free": {"max_jobs_per_day": 10, "max_files": 3},
-    "pro": {"max_jobs_per_day": 50, "max_files": 20},
-    "enterprise": {"max_jobs_per_day": 500, "max_files": 100},
+    "free": {"max_jobs_per_day": 2, "max_files": 5},
+    "developer": {"max_jobs_per_day": 50, "max_files": 20},
+    "professional": {"max_jobs_per_day": 200, "max_files": 50},
+    "enterprise": {"max_jobs_per_day": 500, "max_files": 100}, # Kept for custom plans
 }
 
 async def get_user_tier(user_id: str) -> str:
@@ -150,6 +151,68 @@ async def get_user_keys(user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Could not retrieve keys for user {user_id}: {e}")
         return JSONResponse({"keys": []})
+    
+@app.get("/api/plans")
+async def get_plans(req: Request):
+    """
+    Fetches plans and returns prices based on user's country.
+    Defaults to USD if the country is not India.
+    """
+    # In production, this IP would come from a header like 'X-Forwarded-For'.
+    # We'll simulate the logic for local testing.
+    client_ip = req.client.host 
+    
+    # This is a placeholder for a real GeoIP lookup.
+    # It checks if the IP is local to simulate a user from India.
+    country = "IN" if client_ip in ("127.0.0.1", "localhost") else "US"
+
+    if country == "IN":
+        price_monthly_col = "price_monthly_inr"
+        price_yearly_col = "price_yearly_inr"
+        plan_monthly_col = "razorpay_plan_id_monthly_inr"
+        plan_yearly_col = "razorpay_plan_id_yearly_inr"
+        currency = "INR"
+    else:
+        # Default to US Dollar prices for everyone else
+        price_monthly_col = "price_monthly_usd"
+        price_yearly_col = "price_yearly_usd"
+        plan_monthly_col = "razorpay_plan_id_monthly_usd"
+        plan_yearly_col = "razorpay_plan_id_yearly_usd"
+        currency = "USD"
+
+    try:
+        # Fetch the relevant columns from the Supabase table
+        resp = supabase.table("plans") \
+            .select(f"id, name, features, {price_monthly_col}, {price_yearly_col}, {plan_monthly_col}, {plan_yearly_col}") \
+            .eq("active", True) \
+            .order("price_monthly_usd", desc=False) \
+            .execute()
+
+        if not resp.data:
+            return JSONResponse({"plans": []})
+
+        # Structure the data cleanly for the frontend to use
+        formatted_plans = []
+        for plan in resp.data:
+            formatted_plans.append({
+                "id": plan["id"],
+                "name": plan["name"],
+                "features": plan["features"],
+                "currency": currency,
+                "monthly": {
+                    "price": plan[price_monthly_col],
+                    "razorpay_plan_id": plan[plan_monthly_col]
+                },
+                "yearly": {
+                    "price": plan[price_yearly_col],
+                    "razorpay_plan_id": plan[plan_yearly_col]
+                }
+            })
+
+        return JSONResponse({"plans": formatted_plans})
+    except Exception as e:
+        logger.error(f"Failed to fetch plans: {e}")
+        raise HTTPException(status_code=500, detail="Could not retrieve pricing plans.")
 
 
 # -------------------------------------------
