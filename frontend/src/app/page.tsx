@@ -3,16 +3,249 @@
 import React, { useState, useEffect, useCallback, Fragment, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useDropzone } from "react-dropzone";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
+
 import {
   User, Bot, Terminal, Clipboard, ClipboardCheck, LogOut, Github, Mail, KeyRound,
-  Trash2, X, ShieldCheck, FileText, Zap, HelpCircle, Code, Settings, Edit, ChevronLeft, Loader2
+  Trash2, X, ShieldCheck, FileText, Zap, HelpCircle, Code, Settings, Edit, ChevronLeft, Loader2, ArrowRight, MessageSquare, Linkedin
 } from "lucide-react";
 
 import LandingPage from "./landing_page";
 
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
+
+
+/* --- Interactive Components --- */
+
+// This component tracks the mouse and applies a spotlight effect to the background.
+function InteractiveBackground() {
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      document.body.style.setProperty('--mouse-x', `${e.clientX}px`);
+      document.body.style.setProperty('--mouse-y', `${e.clientY}px`);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+  return null;
+}
+
+// This is the bot icon that follows the cursor with a 3D tilt effect.
+function InteractiveBotIcon() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+
+  const springConfig = { damping: 20, stiffness: 200, mass: 0.5 };
+  const springX = useSpring(mouseX, springConfig);
+  const springY = useSpring(mouseY, springConfig);
+
+  const rotateX = useTransform(springY, [-0.5, 0.5], ["15deg", "-15deg"]);
+  const rotateY = useTransform(springX, [-0.5, 0.5], ["-15deg", "15deg"]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!ref.current) return;
+      const rect = ref.current.getBoundingClientRect();
+      const { width, height, left, top } = rect;
+      const mouseX_relative = e.clientX - left;
+      const mouseY_relative = e.clientY - top;
+      mouseX.set((mouseX_relative / width) - 0.5);
+      mouseY.set((mouseY_relative / height) - 0.5);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, [mouseX, mouseY]);
+
+  return (
+    <motion.div
+      ref={ref}
+      style={{
+        transformStyle: "preserve-3d",
+        rotateX,
+        rotateY,
+      }}
+      className="mb-6 lp-hero-icon"
+    >
+      <div style={{ transform: "translateZ(20px)" }}>
+        <Bot size={40} />
+      </div>
+    </motion.div>
+  );
+}
+
+// --- Animation Variants ---
+const fadeInUp = {
+  initial: { opacity: 0, y: 50 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.2, 0.65, 0.3, 0.9] } }
+};
+
+const staggerContainer = {
+  animate: { transition: { staggerChildren: 0.1 } }
+};
+
+const scaleIn = {
+  initial: { opacity: 0, scale: 0.95 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.95 }
+};
+
+// --- Main Landing Page Component ---
+function LandingPage({ onNavigate }: { onNavigate: () => void }) {
+  const [showContact, setShowContact] = useState(false);
+  
+  const styles = `
+    :root {
+      --text-primary: #EAEAEA;
+      --text-secondary: #A0A0A0;
+      --accent-primary: #3B82F6;
+      --accent-primary-hover: #2563EB;
+      --border-primary: rgba(255, 255, 255, 0.1);
+    }
+    .lp-container { 
+      width: 100%; 
+      height: 100%; /* Changed to 100% to fit within flex container */
+      position: relative; 
+      overflow: hidden;
+      display: flex; /* Added flex */
+      flex-direction: column; /* Added flex-direction */
+    }
+    .lp-container::before {
+      content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: radial-gradient(circle 600px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(74, 144, 226, 0.15), transparent 80%);
+      pointer-events: none;
+    }
+    .lp-hero { 
+      width: 100%; 
+      flex-grow: 1; /* Makes hero take available space */
+      display: flex; 
+      align-items: center; 
+      justify-content: center; 
+      padding: 0 1.5rem; 
+      position: relative; 
+      z-index: 2;
+    }
+    .lp-hero-content-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .lp-hero-icon { 
+      display: inline-flex; align-items: center; justify-content: center; 
+      width: 80px; height: 80px;
+      border-radius: 50%; background-color: rgba(74, 144, 226, 0.1); 
+      border: 1px solid var(--border-primary); color: var(--accent-primary); 
+    }
+    .lp-title { 
+      font-size: clamp(3rem, 7vw, 5.5rem); font-weight: 700; 
+      letter-spacing: -0.04em; line-height: 1.1;
+      margin-bottom: 1.5rem; color: var(--text-primary); 
+    }
+    .lp-title-gradient { 
+      display: block; background: linear-gradient(90deg, var(--accent-primary), #8a5cf6); 
+      -webkit-background-clip: text; background-clip: text; 
+      -webkit-text-fill-color: transparent; color: transparent; 
+    }
+    .lp-subtitle { 
+      max-width: 720px; font-size: clamp(1rem, 2vw, 1.25rem); 
+      color: var(--text-secondary); line-height: 1.7;
+      margin-bottom: 2.5rem; 
+    }
+    .lp-cta-btn { 
+      display: inline-flex; align-items: center; justify-content: center; 
+      gap: 0.75rem; font-size: 1.1rem; font-weight: 500; 
+      padding: 1rem 2rem; border-radius: 9999px; 
+      color: white; background-color: var(--accent-primary); 
+      border: none; transition: all 0.2s ease; cursor: pointer; 
+    }
+    .lp-cta-btn:hover { 
+      background-color: var(--accent-primary-hover); 
+      transform: translateY(-2px); box-shadow: 0 4px 20px rgba(74, 144, 226, 0.3); 
+    }
+    .lp-footer {
+      padding: 1.5rem; text-align: center; color: var(--text-secondary);
+      font-size: 0.875rem; z-index: 2;
+    }
+    .fixed-contact-btn {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100;
+      width: 56px; height: 56px; background-color: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s ease, background-color 0.2s ease;
+    }
+    .fixed-contact-btn:hover {
+      background-color: rgba(255, 255, 255, 0.2); transform: scale(1.1);
+    }
+    .fixed-contact-btn .icon { color: var(--text-primary); width: 28px; height: 28px; }
+    .contact-popup { position: fixed; bottom: 80px; right: 1.5rem; z-index: 101; background-color: rgba(30,30,30,0.8); backdrop-filter: blur(10px); border: 1px solid var(--border-primary); border-radius: 12px; padding: 1.5rem; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); min-width: 250px; opacity: 0; visibility: hidden; transform: translateY(20px); transition: opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease; }
+    .contact-popup.visible { opacity: 1; visibility: visible; transform: translateY(0); }
+    .contact-popup-item { display: flex; align-items: center; gap: 0.75rem; color: var(--text-secondary); transition: color 0.2s ease; }
+    .contact-popup-item:hover { color: var(--accent-primary); }
+    .contact-popup-item + .contact-popup-item { margin-top: 0.75rem; }
+    .contact-popup-title { font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 1rem; }
+  `;
+
+  return (
+    <>
+      <InteractiveBackground />
+      <style>{styles}</style>
+      
+      <div className="lp-container">
+        <main className="lp-hero">
+          <motion.div
+            className="lp-hero-content-stack"
+            variants={staggerContainer}
+            initial="initial"
+            animate="animate"
+          >
+            <motion.div variants={fadeInUp}>
+              <InteractiveBotIcon />
+            </motion.div>
+            <motion.h1 className="lp-title" variants={fadeInUp}>
+              Secure AI Gateway
+              <span className="lp-title-gradient">for Enterprise Code</span>
+            </motion.h1>
+            <motion.p className="lp-subtitle" variants={fadeInUp}>
+              Accelerate development with any LLM, while safeguarding your most valuable asset: your source code.
+            </motion.p>
+            <motion.div variants={fadeInUp}>
+              <button onClick={onNavigate} className="lp-cta-btn group">
+                Begin Your Voyage
+                <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+              </button>
+            </motion.div>
+          </motion.div>
+        </main>
+
+        <div className="fixed-contact-btn" onClick={() => setShowContact(!showContact)}>
+          <MessageSquare className="icon" />
+        </div>
+
+        <div className={`contact-popup ${showContact ? 'visible' : ''}`}>
+          <div className="contact-popup-title">Get in Touch</div>
+          <a href="mailto:support@0pirate.com" className="contact-popup-item">
+            <Mail className="w-5 h-5" />
+            <span>support@0pirate.com</span>
+          </a>
+          <a href="https://www.linkedin.com/in/0pirate" target="_blank" rel="noopener noreferrer" className="contact-popup-item">
+            <Linkedin className="w-5 h-5" />
+            <span>LinkedIn</span>
+          </a>
+        </div>
+        
+        <footer className="lp-footer">
+          <p>&copy; {new Date().getFullYear()} 0PIRATE. All rights reserved.</p>
+        </footer>
+      </div>
+    </>
+  );
+}
 
 /* -------------------------------------------------
    Configuration
@@ -39,28 +272,6 @@ const MODEL_OPTIONS: Record<string, string[]> = {
 type JobStatus = "idle" | "loading" | "result" | "error" | "upgrade";
 type ResultShape = { result?: Record<string, string> | string; analysis?: string; notice?: string; job_id?: string; };
 
-/* -------------------------------------------------
-   Enhanced Animation Variants
----------------------------------------------------*/
-const fadeInUp = {
-  initial: { opacity: 0, y: 20 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -20 }
-};
-
-const staggerContainer = {
-  animate: {
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-};
-
-const scaleIn = {
-  initial: { opacity: 0, scale: 0.95 },
-  animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 0.95 }
-};
 
 /* -------------------------------------------------
    Polling Hook
@@ -130,6 +341,8 @@ const LoadingSpinner = ({ size = 20, className = "" }: { size?: number; classNam
   </motion.div>
 );
 
+
+
 /* -------------------------------------------------
    Redesigned Auth Component
 ---------------------------------------------------*/
@@ -139,6 +352,7 @@ const AuthComponent = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isPasswordFocused, setIsPasswordFocused] = useState(false); // State for password focus
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -173,8 +387,11 @@ const AuthComponent = () => {
         animate="animate"
         transition={{ duration: 0.6 }}
       >
+        <div className="flex justify-center mb-6">
+          <InteractiveBotIcon isPasswordActive={isPasswordFocused} />
+        </div>
         <h1 className="flex items-center justify-center gap-3 text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
-          <Bot size={40} className="text-blue-400" /> 0Pirate
+          0Pirate
         </h1>
         <p className="text-text-secondary mt-3 text-lg">
           {isSignUp ? "Create your account to get started" : "Welcome back to the future of code"}
@@ -240,6 +457,8 @@ const AuthComponent = () => {
             variants={fadeInUp}
             initial="initial"
             animate="animate"
+            onFocus={() => setIsPasswordFocused(true)}
+            onBlur={() => setIsPasswordFocused(false)}
           />
           <motion.button 
             type="submit" 
@@ -278,12 +497,12 @@ const AuthComponent = () => {
         <p className="text-center text-sm text-text-secondary mt-6">
           {isSignUp ? "Already have an account?" : "Don't have an account?"}
           <motion.button 
-  onClick={() => setIsSignUp(!isSignUp)} 
-  className="btn btn-link text-accent-primary hover:text-accent-primary-hover ml-2 px-0 py-0 h-auto font-medium" // Added btn-link for theme blending
-  whileHover={{ scale: 1.05 }}
->
-  {isSignUp ? "Sign In" : "Sign Up"}
-</motion.button>
+            onClick={() => setIsSignUp(!isSignUp)} 
+            className="btn btn-link text-accent-primary hover:text-accent-primary-hover ml-2 px-0 py-0 h-auto font-medium"
+            whileHover={{ scale: 1.05 }}
+          >
+            {isSignUp ? "Sign In" : "Sign Up"}
+          </motion.button>
         </p>
       </motion.div>
     </div>
@@ -1559,7 +1778,7 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
   );
 }
 
-/* -------------------------------------------------
+/*-------------------------------------------------
    Top-level Home wrapper
 ---------------------------------------------------*/
 export default function Home() {
@@ -1568,11 +1787,13 @@ export default function Home() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
   const [userTier, setUserTier] = useState<string | null>(null);
-  const [showLanding, setShowLanding] = useState(true);
+  
+  // State to manage whether to show the landing or auth page for non-logged-in users
+  const [currentView, setCurrentView] = useState<'landing' | 'auth'>('landing');
 
-
-  const handleNavigateToApp = () => { // 👈 **Step 3: Create the handler function**
-    setShowLanding(false);
+  // This function is passed to the landing page to switch the view to the auth page
+  const handleNavigateToAuth = () => {
+    setCurrentView('auth');
   };
   
   const loadKeys = useCallback(async () => {
@@ -1618,6 +1839,7 @@ export default function Home() {
         await loadUserProfile(session.user.id); 
       } else { 
         setUserTier(null); 
+        setCurrentView('landing'); // Reset to landing page on logout
       }
     };
     
@@ -1633,8 +1855,23 @@ export default function Home() {
   }, [loadUserProfile]);
   
   return (
-  <div className="min-h-screen flex flex-col gap-6 py-6 bg-gradient-to-br from-background-deep via-background-deep to-gray-900">
-    <header className="main-container app-header">
+  <div className="min-h-screen flex flex-col bg-background-deep relative">
+    <style>{`
+      body::before {
+        content: '';
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: radial-gradient(
+          circle 600px at var(--mouse-x, 50%) var(--mouse-y, 50%),
+          rgba(74, 144, 226, 0.1),
+          transparent 80%
+        );
+        pointer-events: none;
+        z-index: -1;
+      }
+    `}</style>
+    
+    <header className="main-container app-header py-6 flex justify-between items-center">
       <motion.div
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
@@ -1662,14 +1899,8 @@ export default function Home() {
       )}
     </header>
 
-    <div className="main-container flex-grow">
-      {showLanding && !user ? (
-        // If showLanding is true AND there's no user, show the landing page
-        <LandingPage onNavigate={handleNavigateToApp} />
-      ) : !user ? (
-        // Otherwise, if there's no user, show the login component
-        <AuthComponent />
-      ) : (
+    <div className="main-container flex-grow flex flex-col">
+      {user ? (
         // If there IS a user, show the main application
         <Fragment>
           <AnimatePresence>
@@ -1696,6 +1927,12 @@ export default function Home() {
           </AnimatePresence>
           <MainApp token={token} savedKeys={savedKeys} />
         </Fragment>
+      ) : currentView === 'landing' ? (
+        // If no user and view is 'landing', show the LandingPage
+        <LandingPage onNavigate={handleNavigateToAuth} />
+      ) : (
+        // If no user and view is 'auth', show the AuthComponent
+        <AuthComponent />
       )}
     </div>
   </div>
