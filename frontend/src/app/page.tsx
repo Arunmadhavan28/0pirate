@@ -1178,15 +1178,19 @@ function ToggleSwitch({
   onChange: (checked: boolean) => void;
   icon?: React.ElementType;
 }) {
+  const activeColor = accentColor === 'green' ? '#22C55E' : 'var(--accent-primary)';
+
   return (
     <div
       className="toggle-card-enhanced"
       data-active={checked}
       data-accent={accentColor}
+      style={{ borderColor: checked ? activeColor : 'var(--border-primary)' }} // Dynamically set border color
     >
       <div className="flex justify-between items-start">
         <div className="toggle-switch-info flex-grow">
-          <h5 className={`font-semibold ${checked && (accentColor === 'green' ? 'text-green-400' : 'text-blue-400')}`}>
+          {/* FIXED: The title color now correctly turns green when active */}
+          <h5 className="font-semibold" style={{ color: checked ? activeColor : 'var(--text-primary)' }}>
             {label}
           </h5>
           <p className="text-sm text-text-secondary">{description}</p>
@@ -1196,19 +1200,20 @@ function ToggleSwitch({
             type="checkbox"
             checked={checked}
             onChange={(e) => onChange(e.target.checked)}
-            className="sr-only" // This hides the ugly default checkbox
+            className="sr-only"
           />
           <motion.div
-  className="slider"
-  onClick={() => onChange(!checked)}
-  animate={{ backgroundColor: checked ? (accentColor === 'green' ? 'var(--success-color)' : 'var(--accent-primary)') : 'var(--background-light)' }}
->
-  <motion.span
-    className="slider-thumb"
-    animate={{ x: checked ? 18 : 0 }}
-    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-  />
-</motion.div>
+            className="slider"
+            onClick={() => onChange(!checked)}
+            // FIXED: The slider's background color now correctly turns green when active
+            animate={{ backgroundColor: checked ? activeColor : 'var(--background-light)' }}
+          >
+            <motion.span
+              className="slider-thumb"
+              animate={{ x: checked ? 18 : 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            />
+          </motion.div>
         </div>
       </div>
       <AnimatePresence>
@@ -1218,7 +1223,8 @@ function ToggleSwitch({
             animate={{ opacity: 1, height: 'auto', marginTop: '1rem' }}
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
           >
-            <p className={`toggle-active-info ${accentColor === 'green' ? 'toggle-active-info--green' : 'toggle-active-info--blue'}`}>
+            {/* FIXED: The "active info" text now correctly turns green */}
+            <p className="toggle-active-info" style={{ color: activeColor }}>
               {Icon && <Icon size={16} />} {activeInfo}
             </p>
           </motion.div>
