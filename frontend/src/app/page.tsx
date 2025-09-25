@@ -12,6 +12,7 @@ import {
 
 import LandingPage from "./landing_page";
 import PricingPage from "./pricing";
+import Script from 'next/script';
 
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
@@ -994,20 +995,23 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
 /* -------------------------------------------------
    Enhanced Account Manager
 ---------------------------------------------------*/
-function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTier }: {
+function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTier, onUpgrade }: {
   token: string | null;
   email: string | undefined;
   savedKeys: { name: string; provider: string }[];
   onKeysChange: () => void;
   onClose: () => void;
   userTier: string | null;
+  onUpgrade: () => void; // Accept the new onUpgrade prop
 }) {
   const [activeView, setActiveView] = useState('account');
   
   const getTierBadgeProps = (tier: string | null) => {
     const tierLower = tier?.toLowerCase();
     switch (tierLower) {
-      case 'pro': return { tone: 'info', children: 'Pro Plan' };
+      // FIX: Changed 'pro' to 'developer' to match your plans
+      case 'developer': return { tone: 'info', children: 'Developer Plan' };
+      case 'professional': return { tone: 'info', children: 'Professional Plan' };
       case 'enterprise': return { tone: 'success', children: 'Enterprise' };
       default: return { tone: 'default', children: 'Free Plan' };
     }
@@ -1098,7 +1102,9 @@ function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTi
                                             <Badge {...getTierBadgeProps(userTier)}/>
                                         </div>
                                     </div>
+                                    {/* FIXED: This button now correctly triggers the upgrade flow */}
                                     <motion.button 
+                                        onClick={onUpgrade} 
                                         className="btn btn-primary"
                                         whileHover={{ scale: 1.05 }}
                                         whileTap={{ scale: 0.95 }}
@@ -1773,26 +1779,83 @@ export default function Home() {
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
   const [userTier, setUserTier] = useState<string | null>(null);
   
-  // State now manages landing, pricing, and auth views
   const [currentView, setCurrentView] = useState<'landing' | 'pricing' | 'auth'>('landing');
+
+  // --- ADDED STATE to manage the upgrade flow ---
+  const [isUpgradeMode, setIsUpgradeMode] = useState(false);
+
 
   // Navigate from Landing to Pricing
   const handleNavigateToPricing = () => {
+    setIsUpgradeMode(false); // This is NOT an upgrade flow
     setCurrentView('pricing');
   };
 
+  // --- ADDED HANDLER for the upgrade button in AccountManager ---
+  const handleNavigateToUpgrade = () => {
+    setIsUpgradeMode(true); // This IS an upgrade flow
+    setPanelOpen(false); // Close the account panel
+    setCurrentView('pricing'); // Switch view to pricing page
+  };
+
+
   // On the pricing page, if the user selects the Free plan, navigate to auth
   const handleSelectFreePlan = () => {
+    setIsUpgradeMode(false);
     setCurrentView('auth');
   };
 
   // On the pricing page, if the user selects a Paid plan, start the payment flow
-  const handleSelectPaidPlan = (planId: string, billingCycle: 'monthly' | 'yearly') => {
-    console.log(`Starting payment for plan: ${planId} (${billingCycle})`);
-    // --- THIS IS WHERE YOU WILL TRIGGER THE RAZORPAY FLOW ---
-    // For now, we'll navigate to the auth page as a placeholder.
-    // In the future, you'll call your backend's /api/create-order here.
-    setCurrentView('auth');
+  const handleSelectPaidPlan = async (planId: string, billingCycle: 'monthly' | 'yearly') => {
+    if (!token || !user) {
+      alert("Please sign up or log in to choose a plan.");
+      setCurrentView('auth');
+      return;
+    }
+
+    try {
+      const orderResponse = await fetch(`${BACKEND_URL}/api/create-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ plan_id: planId, billing_cycle: billingCycle })
+      });
+
+      if (!orderResponse.ok) {
+        throw new Error("Failed to create payment order.");
+      }
+
+      const orderDetails = await orderResponse.json();
+
+      const options = {
+        key: orderDetails.razorpay_key_id,
+        amount: orderDetails.amount,
+        currency: orderDetails.currency,
+        name: "0Pirate",
+        description: `Payment for ${planId} plan (${billingCycle})`,
+        order_id: orderDetails.order_id,
+        handler: function (response: any) {
+          alert("Payment successful! Your plan has been upgraded. Please refresh if you don't see the change.");
+          // Refresh user profile to get new tier
+          if (user) loadUserProfile(user.id);
+        },
+        prefill: {
+          email: user.email,
+        },
+        theme: {
+          color: "#3B82F6"
+        }
+      };
+      
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+
+    } catch (err) {
+      console.error("Payment flow failed:", err);
+      alert("An error occurred during the payment process. Please try again.");
+    }
   };
   
   const loadKeys = useCallback(async () => {
@@ -1838,7 +1901,7 @@ export default function Home() {
         await loadUserProfile(session.user.id); 
       } else { 
         setUserTier(null); 
-        setCurrentView('landing'); // Reset to landing page on logout
+        setCurrentView('landing');
       }
     };
     
@@ -1854,7 +1917,7 @@ export default function Home() {
   }, [loadUserProfile]);
   
   const renderView = () => {
-    if (user) {
+    if (user && currentView !== 'pricing') { // Ensure pricing page can be shown when logged in
       return (
         <Fragment>
           <AnimatePresence>
@@ -1874,6 +1937,7 @@ export default function Home() {
                     onKeysChange={loadKeys}
                     userTier={userTier}
                     onClose={() => setPanelOpen(false)}
+                    onUpgrade={handleNavigateToUpgrade} // Pass the new handler
                   />
                 </div>
               </motion.div>
@@ -1888,7 +1952,11 @@ export default function Home() {
       case 'landing':
         return <LandingPage onNavigate={handleNavigateToPricing} />;
       case 'pricing':
-        return <PricingPage onSelectFreePlan={handleSelectFreePlan} onSelectPaidPlan={handleSelectPaidPlan} />;
+        return <PricingPage 
+                  onSelectFreePlan={handleSelectFreePlan} 
+                  onSelectPaidPlan={handleSelectPaidPlan} 
+                  isUpgradeMode={isUpgradeMode} // Pass the state as a prop
+               />;
       case 'auth':
         return <AuthComponent />;
       default:
@@ -1913,6 +1981,8 @@ export default function Home() {
           z-index: -1;
         }
       `}</style>
+     
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       
       <header className="main-container app-header py-6 flex justify-between items-center">
         <motion.div

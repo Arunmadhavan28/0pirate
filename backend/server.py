@@ -8,6 +8,10 @@ import shutil
 import logging
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+import json
+import razorpay
+from fastapi import Header
+from typing import Annotated
 
 from fastapi import FastAPI, Request, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -71,7 +75,7 @@ TIER_LIMITS = {
     "free": {"max_jobs_per_day": 2, "max_files": 5},
     "developer": {"max_jobs_per_day": 50, "max_files": 20},
     "professional": {"max_jobs_per_day": 200, "max_files": 50},
-    "enterprise": {"max_jobs_per_day": 500, "max_files": 100}, # Kept for custom plans
+    "enterprise": {"max_jobs_per_day": 500, "max_files": 100}, # For custom plans
 }
 
 async def get_user_tier(user_id: str) -> str:
@@ -213,6 +217,101 @@ async def get_plans(req: Request):
     except Exception as e:
         logger.error(f"Failed to fetch plans: {e}")
         raise HTTPException(status_code=500, detail="Could not retrieve pricing plans.")
+    
+# Add this Pydantic model with your other models
+class CreateOrderRequest(BaseModel):
+    plan_id: str
+    billing_cycle: str # 'monthly' or 'yearly'
+
+# Initialize the Razorpay client (place this near your Supabase client)
+razorpay_client = razorpay.Client(
+    auth=(settings.razorpay_key_id, settings.razorpay_key_secret)
+)
+
+# Add this new endpoint
+@app.post("/api/create-order")
+async def create_order(req: Request, body: CreateOrderRequest, user: dict = Depends(get_current_user)):
+    print(f"--- DEBUG: Creating order for Plan ID: {body.plan_id}, Cycle: {body.billing_cycle} ---")
+    user_id = user["id"]
+    client_ip = req.client.host
+    country = "IN" if client_ip in ("127.0.0.1", "localhost") else "US"
+
+    # Determine which database columns to use based on location and billing cycle
+    if country == "IN":
+        price_col = f"price_{body.billing_cycle}_inr"
+        currency = "INR"
+    else:
+        price_col = f"price_{body.billing_cycle}_usd"
+        currency = "USD"
+    
+    try:
+        # Fetch the plan price from your Supabase 'plans' table
+        plan_resp = supabase.table("plans").select(price_col).eq("id", body.plan_id).single().execute()
+        if not plan_resp.data:
+            raise HTTPException(status_code=404, detail="Plan not found")
+        
+        amount_in_smallest_unit = plan_resp.data[price_col]
+
+        order_data = {
+            "amount": amount_in_smallest_unit,
+            "currency": currency,
+            "receipt": f"order_{uuid.uuid4().hex[:16]}",
+            "notes": {
+                "user_id": user_id,
+                "plan_id": body.plan_id
+            }
+        }
+        
+        # Create the order with Razorpay
+        order = razorpay_client.order.create(data=order_data)
+        
+        return JSONResponse({
+            "order_id": order["id"],
+            "razorpay_key_id": settings.razorpay_key_id,
+            "amount": order["amount"],
+            "currency": order["currency"]
+        })
+
+    except Exception as e:
+        logger.error(f"Error creating Razorpay order for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Could not create payment order.")
+
+@app.post("/api/razorpay-webhook")
+async def razorpay_webhook(req: Request, x_razoray_signature: Annotated[str | None, Header()] = None):
+    print("--- WEBHOOK FUNCTION IS RUNNING THE LATEST CODE ---")
+    # Read the request body ONCE
+    body = await req.body()
+    try:
+        # Decode the raw body to a string
+        payload_str = body.decode('utf-8')
+        
+        # Use the decoded string to verify the signature
+        razorpay_client.utility.verify_webhook_signature(
+            payload_str,
+            x_razoray_signature,
+            settings.razorpay_webhook_secret
+        )
+        
+        # Parse the SAME string into a JSON object
+        webhook_data = json.loads(payload_str)
+        event = webhook_data.get("event")
+
+        if event == "payment.captured":
+            payload = webhook_data["payload"]["payment"]["entity"]
+            user_id = payload["notes"]["user_id"]
+            plan_id = payload["notes"]["plan_id"]
+            
+            supabase.table("profiles").update({"tier": plan_id}).eq("id", user_id).execute()
+            logger.info(f"Successfully upgraded user {user_id} to plan {plan_id}")
+
+        return JSONResponse(content={"status": "ok"})
+
+    except Exception as e:
+        logger.error(f"Webhook verification failed or error during processing: {e}")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature or processing error")
+
+
+
 
 
 # -------------------------------------------

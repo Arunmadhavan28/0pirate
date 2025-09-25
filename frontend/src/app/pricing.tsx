@@ -56,9 +56,10 @@ interface Plan {
 interface PricingPageProps {
   onSelectFreePlan: () => void;
   onSelectPaidPlan: (planId: string, billingCycle: 'monthly' | 'yearly') => void;
+  isUpgradeMode?: boolean;
 }
 
-export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: PricingPageProps) {
+export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan, isUpgradeMode }: PricingPageProps) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('yearly');
   const [loading, setLoading] = useState(true);
@@ -187,6 +188,8 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
   }
 
   const allPlans = [...plans, enterprisePlan];
+
+  const displayedPlans = isUpgradeMode ? allPlans.filter(plan => plan.id !== 'free') : allPlans;
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 py-20 px-4">
@@ -474,7 +477,8 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
 
         {/* Pricing Cards */}
         <div className="pricing-grid">
-          {allPlans.map((plan: any, index) => (
+          {/* FIXED: We now map over the conditionally filtered 'displayedPlans' array */}
+          {displayedPlans.map((plan: any, index) => (
             <motion.div
               key={plan.id}
               initial={{ opacity: 0, y: 40 }}
@@ -484,34 +488,18 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan }: Pric
                 duration: 0.6,
                 ease: "easeOut"
               }}
-              className={`plan-card ${
-                plan.id === 'developer' ? 'developer-card' : ''
-              } ${
-                plan.highlight ? 'professional-card' : ''
-              }`}
+              className={`plan-card ${plan.id === 'developer' ? 'developer-card' : ''} ${plan.highlight ? 'professional-card' : ''}`}
               ref={plan.id === 'developer' ? developerCardRef : null}
               {...(plan.id === 'developer' ? glowEffect : {})}
             >
-              {plan.popular && (
-                <div className="popular-badge">
-                  Most Popular
-                </div>
-              )}
+              {plan.popular && <div className="popular-badge">Most Popular</div>}
 
               <div className="flex items-center gap-3 mb-4">
-                <div className={`p-3 rounded-xl ${
-                  plan.id === 'developer' ? 'bg-blue-500/20 text-blue-400' :
-                  plan.highlight ? 'bg-emerald-500/20 text-emerald-400' :
-                  'bg-gray-500/20 text-gray-400'
-                }`}>
+                <div className={`p-3 rounded-xl ${plan.id === 'developer' ? 'bg-blue-500/20 text-blue-400' : plan.highlight ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`}>
                   {plan.icon}
                 </div>
                 <div>
-                  <h3 className={`text-2xl font-bold ${
-                    plan.id === 'developer' ? 'text-blue-400' :
-                    plan.highlight ? 'text-emerald-400' :
-                    'text-white'
-                  }`}>
+                  <h3 className={`text-2xl font-bold ${plan.id === 'developer' ? 'text-blue-400' : plan.highlight ? 'text-emerald-400' : 'text-white'}`}>
                     {plan.name}
                   </h3>
                 </div>
