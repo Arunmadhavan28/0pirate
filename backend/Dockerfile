@@ -1,18 +1,18 @@
-FROM python:3.11 AS builder
-
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
-WORKDIR /app
-
-RUN python -m venv .venv
-COPY requirements.txt ./
-RUN .venv/bin/pip install -r requirements.txt
-
 FROM python:3.11-slim
+
 WORKDIR /app
-COPY --from=builder /app/.venv .venv/
+
+# Install dependencies directly
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+
+# Debug - check what's installed
+RUN pip list | grep -E "(uvicorn|razorpay|fastapi)" || echo "Some packages missing"
+RUN python -c "import uvicorn; print('uvicorn OK')" || echo "uvicorn failed"
+RUN python -c "import razorpay; print('razorpay OK')" || echo "razorpay failed"
+
+# Copy app
 COPY . .
 
-# Add venv to PATH
-ENV PATH="/app/.venv/bin:$PATH"
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]
+# Simple command
+CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]

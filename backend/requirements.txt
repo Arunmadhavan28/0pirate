@@ -4,3 +4,7 @@ regex==2024.5.15
 python-dotenv==1.0.1
 pydantic==2.8.2
 Flask
+fastapi
+uvicorn[standard]
+supabase
+python-multipart
