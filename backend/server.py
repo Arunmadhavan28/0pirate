@@ -34,9 +34,16 @@ logger = logging.getLogger("server")
 # -------------------------------------------
 APP_NAME = "0pirate-backend"
 app = FastAPI(title=APP_NAME)
+
+origins = [
+    "https://0pirate.com",  # Your production domain
+    "https://0pirate-kx9ac2jzj-0pirates-projects.vercel.app",  # The Vercel preview URL from your error
+    "http://localhost:3000", # For local development
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins, # Use the specific list here
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
