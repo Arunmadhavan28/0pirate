@@ -36,11 +36,13 @@ APP_NAME = "0pirate-backend"
 app = FastAPI(title=APP_NAME)
 
 origins = [
-    "https://0pirate.com",  
-    "https://0pirate-kx9ac2jzj-0pirates-projects.vercel.app",  
+    "https://0pirate.com",
+    "https://0pirate-kx9ac2jzj-0pirates-projects.vercel.app",
     "http://localhost:3000",
-    "https://backend-muddy-moon-310.fly.dev",  # <- Add this
+    "https://backend-muddy-moon-310.fly.dev",
+    "https://api.0pirate.com",  
 ]
+
 
 
 app.add_middleware(
