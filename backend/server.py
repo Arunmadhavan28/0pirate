@@ -38,6 +38,7 @@ app = FastAPI(title=APP_NAME)
 origins = [
     "https://0pirate.com",
     "https://0pirate-kx9ac2jzj-0pirates-projects.vercel.app",
+    "https://www.0pirate.com", 
     "http://localhost:3000",
     "https://backend-muddy-moon-310.fly.dev",
     "https://api.0pirate.com",  
