@@ -36,10 +36,12 @@ APP_NAME = "0pirate-backend"
 app = FastAPI(title=APP_NAME)
 
 origins = [
-    "https://0pirate.com",  # Your production domain
-    "https://0pirate-kx9ac2jzj-0pirates-projects.vercel.app",  # The Vercel preview URL from your error
-    "http://localhost:3000", # For local development
+    "https://0pirate.com",  
+    "https://0pirate-kx9ac2jzj-0pirates-projects.vercel.app",  
+    "http://localhost:3000",
+    "https://backend-muddy-moon-310.fly.dev",  # <- Add this
 ]
+
 
 app.add_middleware(
     CORSMiddleware,
