@@ -24,4 +24,4 @@ primary_region = 'bom'
   cpus = 1
 
 [processes]
-  app = "uvicorn server:app --host 0.0.0.0 --port 8080"
+  app = ".venv/bin/uvicorn server:app --host 0.0.0.0 --port 8080"
