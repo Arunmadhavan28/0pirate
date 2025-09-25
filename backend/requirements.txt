@@ -8,3 +8,4 @@ fastapi
 uvicorn[standard]
 supabase
 python-multipart
+razorpay==1.4.1 
