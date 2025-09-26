@@ -2,6 +2,8 @@
 import type { Metadata } from "next";
 import { Inter, Fira_Code } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next"; // <-- ADD THIS LINE
+import { SpeedInsights } from "@vercel/speed-insights/next"; // <-- ADD THIS LINE
 
 
 const inter = Inter({ 
@@ -33,6 +35,8 @@ export default function RootLayout({
         <div className="flex flex-col h-full text-text-primary">
           {children}
         </div>
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
