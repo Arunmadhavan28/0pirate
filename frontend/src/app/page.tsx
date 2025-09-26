@@ -1460,77 +1460,79 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
 
             {/* Task Selection */}
             <motion.div className="card space-y-6" variants={fadeInUp}>
-              <div className="space-y-3">
-                <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
-                  <Settings size={16} />
-                  Task Selection
-                </label>
-                <select 
-                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                  value={task} 
-                  onChange={(e) => setTask(e.target.value)}
-                >
-                  {taskOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-text-secondary">Provider</label>
-                  <select 
-                    className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                    value={provider} 
-                    onChange={(e) => setProvider(e.target.value)}
-                  >
-                    {Object.keys(MODEL_OPTIONS).map((p) => (
-                      <option key={p} value={p} className="capitalize">{p}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-text-secondary">Model</label>
-                  <select 
-                    className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                    value={model} 
-                    onChange={(e) => setModel(e.target.value)} 
-                    disabled={(MODEL_OPTIONS[provider] || []).length <= 1}
-                  >
-                    {(MODEL_OPTIONS[provider] || []).map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              // --- REPLACE the API Key dropdown block with this ---
-{provider !== 'auto' && provider !== 'ollama' && (
-  <div className="space-y-2">
-    <label className="text-sm font-medium text-text-secondary">API Key</label>
-    {token ? (
+  <div className="space-y-3">
+    <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
+      <Settings size={16} />
+      Task Selection
+    </label>
+    <select 
+      className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+      value={task} 
+      onChange={(e) => setTask(e.target.value)}
+    >
+      {taskOptions.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  </div>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-text-secondary">Provider</label>
       <select 
         className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-        value={selectedKeyName} 
-        onChange={(e) => setSelectedKeyName(e.target.value)} 
-        disabled={savedKeys.filter(k => k.provider === provider).length === 0}
+        value={provider} 
+        onChange={(e) => setProvider(e.target.value)}
       >
-        {savedKeys.filter(k => k.provider === provider).length === 0 ? 
-          (<option value="">Go to Account to add a key</option>) : 
-          (savedKeys.filter(key => key.provider === provider).map((key) => (
-            <option key={key.name} value={key.name}>{key.name}</option>
-          )))
-        }
+        {Object.keys(MODEL_OPTIONS).map((p) => (
+          <option key={p} value={p} className="capitalize">{p}</option>
+        ))}
       </select>
-    ) : (
-      <GuestApiKeyInput 
-        apiKey={guestApiKey} 
-        setApiKey={setGuestApiKey} 
-        setProvider={setProvider} 
-      />
-    )}
+    </div>
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-text-secondary">Model</label>
+      <select 
+        className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+        value={model} 
+        onChange={(e) => setModel(e.target.value)} 
+        disabled={(MODEL_OPTIONS[provider] || []).length <= 1}
+      >
+        {(MODEL_OPTIONS[provider] || []).map((m) => (
+          <option key={m} value={m}>{m}</option>
+        ))}
+      </select>
+    </div>
   </div>
-)}
+
+  {/* This is the corrected API Key section */}
+  {provider !== 'auto' && provider !== 'ollama' && (
+    <div className="space-y-2">
+      <label className="text-sm font-medium text-text-secondary">API Key</label>
+      {token ? (
+        <select 
+          className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+          value={selectedKeyName} 
+          onChange={(e) => setSelectedKeyName(e.target.value)} 
+          disabled={savedKeys.filter(k => k.provider === provider).length === 0}
+        >
+          {savedKeys.filter(k => k.provider === provider).length === 0 ? 
+            (<option value="">Go to Account to add a key</option>) : 
+            (savedKeys.filter(key => key.provider === provider).map((key) => (
+              <option key={key.name} value={key.name}>{key.name}</option>
+            )))
+          }
+        </select>
+      ) : (
+        <GuestApiKeyInput 
+          apiKey={guestApiKey} 
+          setApiKey={setGuestApiKey} 
+          setProvider={setProvider} 
+        />
+      )}
+    </div>
+  )}
+
             </motion.div>
 
             {/* Settings Toggles */}
