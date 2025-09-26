@@ -139,9 +139,12 @@ function useJobPolling(jobId: string | null, token: string | null, onResult: (da
             if (cancelled) return;
             setStatus(`${steps[stepIndex++ % steps.length]}`);
             try {
-                const currentToken = tokenRef.current;
-                if (!currentToken) throw new Error("Authentication token is missing.");
-                const res = await fetch(`${BACKEND_URL}/api/status/${jobId}`, { headers: { Authorization: `Bearer ${currentToken}` } });
+                
+    const headers: HeadersInit = {};
+    if (tokenRef.current) {
+        headers['Authorization'] = `Bearer ${tokenRef.current}`;
+    }
+    const res = await fetch(`${BACKEND_URL}/api/status/${jobId}`, { headers });
                 if (!res.ok) { let body; try { body = await res.json(); } catch (_) { body = null; } throw new Error(body?.detail || `Server responded with status ${res.status}`); }
                 const data = await res.json();
                 if (data.status === "completed") { onResult(data); } else if (data.status === "failed") { throw new Error(data.notice || data.result || "Job failed"); } else { setTimeout(poll, 2200); }
@@ -1084,7 +1087,12 @@ function ToggleSwitch({
 /* -------------------------------------------------
    Enhanced Main Application Component
 ---------------------------------------------------*/
-function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name: string; provider: string }[] }) {
+function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }: {
+  token: string | null;
+  savedKeys: { name: string; provider: string }[];
+  onGuestQuotaExceeded: () => void;
+  onUserQuotaExceeded: () => void;
+}) {
   type ViewState = JobStatus;
   const [pastedCode, setPastedCode] = useState("");
   const [errorLog, setErrorLog] = useState("");
@@ -1175,15 +1183,23 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
     setStatus("Analysis completed successfully");
   }, []);
 
-  const fail = useCallback((err: string) => { 
-    if (err?.includes?.("Daily job quota")) { 
-      setView("upgrade"); 
-    } else { 
-      setResult({ notice: `Error: ${err}` }); 
-      setView("error"); 
-    } 
-    setStatus("Analysis failed"); 
-  }, []);
+  const fail = useCallback((err: string) => {
+    // NOTE: Ensure your backend returns an error containing this string for quota issues
+    if (err?.includes?.("Daily job quota")) {
+      if (!token) {
+        // If user is a GUEST, trigger the Auth screen
+        onGuestQuotaExceeded();
+      } else {
+        // If user is LOGGED IN, trigger the Upgrade/Pricing screen
+        onUserQuotaExceeded();
+      }
+    } else {
+      // For all other errors
+      setResult({ notice: `Error: ${err}` });
+      setView("error");
+    }
+    setStatus("Analysis failed");
+  }, [token, onGuestQuotaExceeded, onUserQuotaExceeded]); // Dependencies
   
   useJobPolling(jobId, token, success, fail, setStatus);
 
@@ -1195,10 +1211,12 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
   }, [provider, savedKeys]);
   
   const submit = async () => {
-    if (!pastedCode.trim()) return fail("Please paste your code.");
+    if (!pastedCode.trim() && files.length === 0) return fail("Please paste or upload your code.");
+    
+    // This check is still relevant for users who want to use their own keys
     const requiresKey = !['auto', 'ollama'].includes(provider);
     if (requiresKey && !selectedKeyName) { 
-      return fail(`Please save an API key for '${provider}' in your account.`); 
+      return fail(`Please save an API key for '${provider}' in your account settings.`); 
     }
     
     setView("loading");
@@ -1207,7 +1225,11 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
     setStatus("Submitting analysis request...");
     
     const fd = new FormData();
-    fd.append("files", new Blob([pastedCode]), "pasted_code.py");
+    if (files.length > 0) {
+        files.forEach(file => fd.append("files", file, file.name));
+    } else {
+        fd.append("files", new Blob([pastedCode]), "pasted_code.py");
+    }
     fd.append("task", task);
     if (errorLog) fd.append("error_log", errorLog);
     fd.append("provider", provider);
@@ -1218,12 +1240,18 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
     fd.append("abstraction_level", maxSecurity ? "paranoid" : "standard");
     
     try {
-      if (!token) throw new Error("Authentication token is missing.");
+      // Conditionally create headers. No auth header for guests.
+      const headers: HeadersInit = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const res = await fetch(`${BACKEND_URL}/api/process_code`, { 
         method: "POST", 
-        headers: { Authorization: `Bearer ${token}` }, 
+        headers: headers, // Use the new headers object
         body: fd 
       });
+
       const d = await res.json();
       if (res.ok) { 
         setJobId(d.job_id); 
@@ -1248,6 +1276,7 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
       setTimeout(() => setCopyOK(""), 2000);
     });
   };
+
 
   const resetAll = () => {
     setPastedCode("");
@@ -1492,32 +1521,28 @@ function MainApp({ token, savedKeys }: { token: string | null; savedKeys: { name
               {view === 'idle' && <OnboardingIdleView />}
               
               {view === 'loading' && (
-                <motion.div 
-                  key="loading" 
-                  className="flex flex-col items-center justify-center h-full text-center space-y-6"
-                  variants={fadeInUp}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                >
-                   <motion.div
-                     animate={{ rotate: 360 }}
-                     transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                   >
-                     <Bot size={48} className="text-accent-primary" />
-                   </motion.div>
-                   
-                   <div className="space-y-2">
-                     <h3 className="text-lg font-semibold">Processing Your Code</h3>
-                     <motion.p 
-                       className="text-text-secondary"
-                       key={status}
-                       initial={{ opacity: 0, y: 5 }}
-                       animate={{ opacity: 1, y: 0 }}
-                     >
-                       {status}
-                     </motion.p>
-                   </div>
+    <motion.div 
+      key="loading" 
+      className="flex flex-col items-center justify-center h-full text-center space-y-6"
+      variants={fadeInUp}
+      initial="initial"
+      animate="animate"
+      exit="exit"
+    >
+       {/* The rotating motion.div wrapper has been removed */}
+       <Bot size={48} className="text-accent-primary" />
+       
+       <div className="space-y-2">
+         <h3 className="text-lg font-semibold">Processing Your Code</h3>
+         <motion.p 
+           className="text-text-secondary"
+           key={status}
+           initial={{ opacity: 0, y: 5 }}
+           animate={{ opacity: 1, y: 0 }}
+         >
+           {status}
+         </motion.p>
+       </div>
                    
                    <div className="w-full max-w-xs">
                      <div className="bg-background-light h-2 rounded-full overflow-hidden">
@@ -1627,57 +1652,50 @@ export default function Home() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
   const [userTier, setUserTier] = useState<string | null>(null);
-  
-  const [currentView, setCurrentView] = useState<'landing' | 'pricing' | 'auth'>('landing');
 
-  // --- ADDED STATE to manage the upgrade flow ---
+  // --- CORRECT STATE MANAGEMENT for the new flow ---
+  const [showLandingPage, setShowLandingPage] = useState(true);
+  const [showPricingPage, setShowPricingPage] = useState(false);
+  const [showAuthPage, setShowAuthPage] = useState(false);
   const [isUpgradeMode, setIsUpgradeMode] = useState(false);
 
-
-  // Navigate from Landing to Pricing
-  const handleNavigateToPricing = () => {
-    setIsUpgradeMode(false); // This is NOT an upgrade flow
-    setCurrentView('pricing');
+  // --- CORRECT HANDLERS for the new flow ---
+  const handleEnterApp = () => {
+    setShowLandingPage(false);
   };
 
-  // --- ADDED HANDLER for the upgrade button in AccountManager ---
   const handleNavigateToUpgrade = () => {
-    setIsUpgradeMode(true); // This IS an upgrade flow
-    setPanelOpen(false); // Close the account panel
-    setCurrentView('pricing'); // Switch view to pricing page
+    setIsUpgradeMode(true);
+    setPanelOpen(false);
+    setShowPricingPage(true);
   };
 
-
-  // On the pricing page, if the user selects the Free plan, navigate to auth
-  const handleSelectFreePlan = () => {
-    setIsUpgradeMode(false);
-    setCurrentView('auth');
+  const handleGuestQuotaExceeded = () => {
+    setShowAuthPage(true);
   };
 
-  // On the pricing page, if the user selects a Paid plan, start the payment flow
+  const handleUserQuotaExceeded = () => {
+    handleNavigateToUpgrade();
+  };
+
   const handleSelectPaidPlan = async (planId: string, billingCycle: 'monthly' | 'yearly') => {
     if (!token || !user) {
+      setShowPricingPage(false);
+      setShowAuthPage(true);
       alert("Please sign up or log in to choose a plan.");
-      setCurrentView('auth');
       return;
     }
 
     try {
       const orderResponse = await fetch(`${BACKEND_URL}/api/create-order`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ plan_id: planId, billing_cycle: billingCycle })
       });
-
       if (!orderResponse.ok) {
         throw new Error("Failed to create payment order.");
       }
-
       const orderDetails = await orderResponse.json();
-
       const options = {
         key: orderDetails.razorpay_key_id,
         amount: orderDetails.amount,
@@ -1686,56 +1704,38 @@ export default function Home() {
         description: `Payment for ${planId} plan (${billingCycle})`,
         order_id: orderDetails.order_id,
         handler: function (response: any) {
-          alert("Payment successful! Your plan has been upgraded. Please refresh if you don't see the change.");
-          // Refresh user profile to get new tier
+          alert("Payment successful! Your plan has been upgraded.");
+          setShowPricingPage(false);
           if (user) loadUserProfile(user.id);
         },
-        prefill: {
-          email: user.email,
-        },
-        theme: {
-          color: "#3B82F6"
-        }
+        prefill: { email: user.email },
+        theme: { color: "#3B82F6" }
       };
-      
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
-
     } catch (err) {
       console.error("Payment flow failed:", err);
-      alert("An error occurred during the payment process. Please try again.");
+      alert("An error occurred during the payment process.");
     }
   };
   
   const loadKeys = useCallback(async () => {
     if (!token) { setSavedKeys([]); return; }
     try {
-      const res = await fetch(`${BACKEND_URL}/api/keys`, { 
-        headers: { Authorization: `Bearer ${token}` } 
-      });
+      const res = await fetch(`${BACKEND_URL}/api/keys`, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error("Could not fetch keys");
       const data = await res.json();
       setSavedKeys(data.keys || []);
-    } catch (e) { 
-      console.error("Failed to load keys:", e); 
-      setSavedKeys([]); 
-    }
+    } catch (e) { console.error("Failed to load keys:", e); setSavedKeys([]); }
   }, [token]);
 
   const loadUserProfile = useCallback(async (userId: string) => {
     if (!userId) return;
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('tier')
-        .eq('id', userId)
-        .single();
+      const { data, error } = await supabase.from('profiles').select('tier').eq('id', userId).single();
       if (error) { throw error; }
       if (data) { setUserTier(data.tier || "free"); }
-    } catch (e) { 
-      console.error("Failed to load user profile:", e); 
-      setUserTier("free"); 
-    }
+    } catch (e) { console.error("Failed to load user profile:", e); setUserTier("free"); }
   }, []);
 
   useEffect(() => {
@@ -1750,120 +1750,81 @@ export default function Home() {
         await loadUserProfile(session.user.id); 
       } else { 
         setUserTier(null); 
-        setCurrentView('landing');
       }
     };
-    
-    supabase.auth.getSession().then(({ data: { session } }) => { 
-      handleAuthChange(session); 
-    });
-    
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { 
-      handleAuthChange(session); 
-    });
-    
+    supabase.auth.getSession().then(({ data: { session } }) => { handleAuthChange(session); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { handleAuthChange(session); });
     return () => { subscription?.unsubscribe(); };
   }, [loadUserProfile]);
   
-  const renderView = () => {
-    if (user && currentView !== 'pricing') { // Ensure pricing page can be shown when logged in
-      return (
-        <Fragment>
-          <AnimatePresence>
-            {panelOpen && (
-              <motion.div 
-                className="modal-backdrop"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setPanelOpen(false)}
-              >
-                <div onClick={(e) => e.stopPropagation()}>
-                  <AccountManager 
-                    token={token} 
-                    email={user?.email} 
-                    savedKeys={savedKeys} 
-                    onKeysChange={loadKeys}
-                    userTier={userTier}
-                    onClose={() => setPanelOpen(false)}
-                    onUpgrade={handleNavigateToUpgrade} // Pass the new handler
-                  />
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <MainApp token={token} savedKeys={savedKeys} />
-        </Fragment>
-      );
-    }
-
-    switch (currentView) {
-      case 'landing':
-        return <LandingPage onNavigate={handleNavigateToPricing} />;
-      case 'pricing':
-        return <PricingPage 
-                  onSelectFreePlan={handleSelectFreePlan} 
-                  onSelectPaidPlan={handleSelectPaidPlan} 
-                  isUpgradeMode={isUpgradeMode} // Pass the state as a prop
-               />;
-      case 'auth':
-        return <AuthComponent />;
-      default:
-        return <LandingPage onNavigate={handleNavigateToPricing} />;
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col bg-background-deep relative">
       <InteractiveBackground />
       <style>{`
         body::before {
-          content: '';
-          position: fixed;
-          top: 0; left: 0; right: 0; bottom: 0;
-          background: radial-gradient(
-            circle 600px at var(--mouse-x, 50%) var(--mouse-y, 50%),
-            rgba(74, 144, 226, 0.1),
-            transparent 80%
-          );
-          pointer-events: none;
-          z-index: -1;
+          content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+          background: radial-gradient( circle 600px at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(74, 144, 226, 0.1), transparent 80% );
+          pointer-events: none; z-index: -1;
         }
       `}</style>
-     
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       
-      <header className="main-container app-header py-6 flex justify-between items-center">
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.6 }}
-        >
-          <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
-            0Pirate
-          </h1>
-          <p className="app-tagline">Secure & Refactor Your Code with AI</p>
-        </motion.div>
-        
-        {user && (
-          <motion.button 
-            onClick={() => setPanelOpen(true)} 
-            className="btn btn-secondary group"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <User size={16} className="group-hover:scale-110 transition-transform" /> 
-            Account
-          </motion.button>
-        )}
-      </header>
+      {!showLandingPage && (
+        <header className="main-container app-header py-6 flex justify-between items-center">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
+            <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
+            <p className="app-tagline">Secure & Refactor Your Code with AI</p>
+          </motion.div>
+          {user ? (
+            <motion.button onClick={() => setPanelOpen(true)} className="btn btn-secondary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <User size={16} className="group-hover:scale-110 transition-transform" /> Account
+            </motion.button>
+          ) : (
+            <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              Sign Up / Log In
+            </motion.button>
+          )}
+        </header>
+      )}
 
       <div className="main-container flex-grow flex flex-col">
-        {renderView()}
+        <AnimatePresence mode="wait">
+          {showLandingPage ? (
+            <motion.div key="landing" {...scaleIn}>
+              <LandingPage onNavigate={handleEnterApp} />
+            </motion.div>
+          ) : (
+            <motion.div key="app" className="w-full h-full" {...scaleIn}>
+              <MainApp
+                token={token}
+                savedKeys={savedKeys}
+                onGuestQuotaExceeded={handleGuestQuotaExceeded}
+                onUserQuotaExceeded={handleUserQuotaExceeded}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {panelOpen && (
+          <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPanelOpen(false)}>
+            <div onClick={(e) => e.stopPropagation()}>
+              <AccountManager token={token} email={user?.email} savedKeys={savedKeys} onKeysChange={loadKeys} userTier={userTier} onClose={() => setPanelOpen(false)} onUpgrade={handleNavigateToUpgrade} />
+            </div>
+          </motion.div>
+        )}
+        {showPricingPage && (
+           <motion.div key="pricing" className="modal-backdrop" {...scaleIn}>
+              <PricingPage onSelectFreePlan={() => setShowPricingPage(false)} onSelectPaidPlan={handleSelectPaidPlan} isUpgradeMode={isUpgradeMode} />
+           </motion.div>
+        )}
+        {showAuthPage && (
+          <motion.div key="auth" className="modal-backdrop" {...scaleIn}>
+            <AuthComponent onAuthSuccess={() => setShowAuthPage(false)} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
