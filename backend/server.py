@@ -82,6 +82,21 @@ async def get_current_user(req: Request) -> dict:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+    
+async def get_optional_current_user(req: Request) -> Optional[dict]:
+    """Tries to validate the Supabase JWT but returns None if it's missing or invalid."""
+    auth_header = req.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return None
+    token = auth_header.split(" ")[1]
+    try:
+        user_resp = supabase.auth.get_user(token)
+        if user_resp and getattr(user_resp, "user", None):
+            u = user_resp.user
+            return {"id": u.id, "email": u.email}
+        return None
+    except Exception:
+        return None
 
 TIER_LIMITS = {
     "free": {"max_jobs_per_day": 2, "max_files": 5},
@@ -113,6 +128,26 @@ async def check_tier_quota(user_id: str, tier: str):
         logger.error(f"Could not check quota for user {user_id}: {e}")
         # Fail open or closed? For now, let it pass but log error.
         pass
+
+async def check_anonymous_quota(req: Request):
+    """Checks the daily job quota for an anonymous user based on their IP address."""
+    ip_address = req.client.host
+    if not ip_address:
+        # If IP is not available, fail closed to prevent abuse.
+        raise HTTPException(status_code=400, detail="Could not determine client IP address.")
+
+    limits = TIER_LIMITS["free"]
+    today = datetime.utcnow().date()
+    start_of_day = datetime.combine(today, datetime.min.time()).isoformat()
+    
+    try:
+        resp = supabase.table("jobs").select("id", count="exact").eq("ip_address", ip_address).gte("created_at", start_of_day).execute()
+        if resp.count >= limits["max_jobs_per_day"]:
+            raise HTTPException(status_code=429, detail="Daily job quota exceeded. Please sign up for a free account to continue.")
+    except Exception as e:
+        logger.error(f"Could not check anonymous quota for IP {ip_address}: {e}")
+        # Let it pass but log the error
+        pass    
 
 
 class ApiKeyRequest(BaseModel):
@@ -330,109 +365,106 @@ async def razorpay_webhook(req: Request, x_razoray_signature: Annotated[str | No
 # PROCESSING ENDPOINT (CORRECTED AND FINAL)
 # -------------------------------------------
 class ProcessRequestForm:
+    """Handles form data for both logged-in and anonymous users."""
     def __init__(
         self,
         task: str = Form(...),
-        error_log: Optional[str] = Form(None),
         provider: str = Form(...),
+        error_log: Optional[str] = Form(None),
         model: Optional[str] = Form(None),
-        api_key_name: str = Form(...),  # NEW: User must specify which key to use
+        api_key_name: Optional[str] = Form(None), # Optional for guests
+        api_key: Optional[str] = Form(None),     # Optional for logged-in users
         token_saver_enabled: Optional[bool] = Form(False),
         abstraction_enabled: Optional[bool] = Form(True),
         abstraction_level: Optional[str] = Form("paranoid"),
-        abstraction_chunking: Optional[bool] = Form(False),
-        abstraction_noise: Optional[bool] = Form(True),
     ):
         self.task = task
-        self.error_log = error_log
         self.provider = provider
+        self.error_log = error_log
         self.model = model
         self.api_key_name = api_key_name
+        self.api_key = api_key
         self.token_saver_enabled = token_saver_enabled
         self.abstraction_enabled = abstraction_enabled
         self.abstraction_level = abstraction_level
-        self.abstraction_chunking = abstraction_chunking
-        self.abstraction_noise = abstraction_noise
 
 @app.post("/api/process_code")
 async def api_process_code(
     req: Request,
     files: List[UploadFile] = File(...),
     form_data: ProcessRequestForm = Depends(),
-    user: dict = Depends(get_current_user)
+    user: Optional[dict] = Depends(get_optional_current_user) # --- CHANGED: Authentication is now optional
 ):
-    user_id = user["id"]
+    user_id = None
+    ip_address = None
+    api_key = form_data.api_key # Start with the raw key if provided
 
-    if form_data.task == "fix_and_secure" and not form_data.error_log:
-        raise HTTPException(status_code=400, detail="Terminal output is required for the 'Fix & Secure' task.")
+    if user:
+        # --- LOGGED-IN USER LOGIC ---
+        user_id = user["id"]
+        user_tier = await get_user_tier(user_id)
+        await check_tier_quota(user_id, user_tier)
+        
+        # Logged-in users use saved keys by name
+        if form_data.provider.lower() not in ["auto", "ollama"] and form_data.api_key_name:
+            try:
+                key_ref_resp = supabase.table("user_api_keys").select("encrypted_api_key_id").eq("user_id", user_id).eq("name", form_data.api_key_name).limit(1).single().execute()
+                if not key_ref_resp.data:
+                    raise HTTPException(status_code=400, detail=f"API key named '{form_data.api_key_name}' not found.")
+                
+                secret_id = key_ref_resp.data["encrypted_api_key_id"]
+                decrypted_resp = supabase.rpc("reveal_secret", {"secret_id": secret_id}).execute()
+                api_key = decrypted_resp.data
+            except Exception as e:
+                raise HTTPException(status_code=500, detail="Could not retrieve your saved API key.")
+    
+    else:
+        # --- ANONYMOUS USER LOGIC ---
+        ip_address = req.client.host
+        # If the guest is not providing their own key, check the free quota
+        if not api_key:
+            await check_anonymous_quota(req)
 
-    user_tier = await get_user_tier(user_id)
-    await check_tier_quota(user_id, user_tier)
-
-    api_key = None
-    provider = form_data.provider.lower()
-    if provider not in ["ollama", "auto", "qwen"]:
-        try:
-            # UPDATED LOGIC: Fetch the key by its custom name for the current user.
-            key_ref_resp = supabase.table("user_api_keys") \
-                .select("encrypted_api_key_id") \
-                .eq("user_id", user_id) \
-                .eq("name", form_data.api_key_name) \
-                .limit(1).single().execute()
-
-            if not key_ref_resp.data:
-                raise HTTPException(status_code=400, detail=f"API key named '{form_data.api_key_name}' not found.")
-            
-            secret_id = key_ref_resp.data["encrypted_api_key_id"]
-            decrypted_resp = supabase.rpc("reveal_secret", {"secret_id": secret_id}).execute()
-            api_key = decrypted_resp.data
-
-        except Exception as e:
-            logger.error(f"Could not retrieve API key for user {user_id}: {e}")
-            raise HTTPException(status_code=500, detail=f"Could not retrieve API key.")
-
+    # --- (The rest of the file processing logic remains the same) ---
     project_files: Dict[str, str] = {}
     with tempfile.TemporaryDirectory() as tmpdir:
+        # ... (zip and file reading logic is unchanged)
         is_zip = len(files) == 1 and files[0].filename and files[0].filename.lower().endswith(".zip")
         if is_zip:
             zip_path = os.path.join(tmpdir, files[0].filename)
-            with open(zip_path, "wb") as f:
-                shutil.copyfileobj(files[0].file, f)
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(tmpdir)
+            with open(zip_path, "wb") as f: shutil.copyfileobj(files[0].file, f)
+            with zipfile.ZipFile(zip_path, "r") as zf: zf.extractall(tmpdir)
             for root, _, fnames in os.walk(tmpdir):
                 for fname in fnames:
                     if not fname.lower().endswith(".zip") and not fname.startswith("._"):
                         fpath = os.path.join(root, fname)
                         rpath = os.path.relpath(fpath, tmpdir)
                         try:
-                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
-                                project_files[rpath] = f.read()
-                        except (IOError, OSError):
-                            pass
+                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f: project_files[rpath] = f.read()
+                        except (IOError, OSError): pass
         else:
             for file in files:
                 contents = await file.read()
-                if file.filename:
-                    project_files[file.filename] = contents.decode("utf-8", errors="ignore")
+                if file.filename: project_files[file.filename] = contents.decode("utf-8", errors="ignore")
 
     if not project_files:
-        raise HTTPException(status_code=400, detail="No processable files found in the upload.")
+        raise HTTPException(status_code=400, detail="No processable files found.")
 
     job_id = str(uuid.uuid4())
     job_payload = {**form_data.__dict__, "project_files": project_files, "api_keys": {"api_key": api_key}}
-
-
+    
+    # --- CHANGED: Save user_id OR ip_address to the database ---
     job_metadata = {
         "job_id": job_id,
         "user_id": user_id,
+        "ip_address": ip_address, # This will be null for logged-in users
         "status": "pending",
         "task": form_data.task,
         "provider": form_data.provider,
         "created_at": datetime.utcnow().isoformat()
     }
     
-    JOB_STORE[job_id] = job_metadata
+    JOB_STORE[job_id] = job_metadata # Also store in-memory for quick access
     supabase.table("jobs").insert(job_metadata).execute()
 
     asyncio.create_task(process_job_background(job_id, job_payload))
@@ -491,18 +523,26 @@ async def process_job_background(job_id: str, payload: dict):
     supabase.table("jobs").update(job_update).eq("job_id", job_id).execute()
 
 @app.get("/api/status/{job_id}")
-async def get_job_status(job_id: str, user: dict = Depends(get_current_user)):
-    user_id = user["id"]
+async def get_job_status(req: Request, job_id: str, user: Optional[dict] = Depends(get_optional_current_user)):
+    # First, check the in-memory store for a quick response
     job = JOB_STORE.get(job_id)
-    if job and job.get("user_id") == user_id:
-        return JSONResponse(job)
+    if job:
+        if user and job.get("user_id") == user["id"]:
+            return JSONResponse(job)
+        if not user and job.get("ip_address") == req.client.host:
+            return JSONResponse(job)
 
+    # If not in memory, check the database
     try:
         resp = supabase.table("jobs").select("*").eq("job_id", job_id).single().execute()
-        if resp.data and resp.data.get("user_id") == user_id:
-            return JSONResponse(resp.data)
+        if resp.data:
+            db_job = resp.data
+            if user and db_job.get("user_id") == user["id"]:
+                return JSONResponse(db_job)
+            if not user and db_job.get("ip_address") == req.client.host:
+                return JSONResponse(db_job)
     except Exception as e:
-        logger.debug("Failed to fetch job from Supabase: %s", e)
+        logger.debug(f"Failed to fetch job from Supabase: {e}")
 
     raise HTTPException(status_code=404, detail="Job not found or not authorized")
 

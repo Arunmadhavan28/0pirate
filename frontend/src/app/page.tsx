@@ -1280,15 +1280,15 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   const submit = async () => {
     if (!pastedCode.trim() && files.length === 0) return fail("Please paste or upload your code.");
   
-  const requiresKey = !['auto', 'ollama'].includes(provider);
-  if (requiresKey) {
-      if (token && !selectedKeyName) {
-          return fail(`Please select a saved API key for '${provider}' in your account settings.`);
-      }
-      if (!token && !guestApiKey.trim()) {
-          return fail(`Please provide an API key for '${provider}' to continue.`);
-      }
-  }
+    const requiresKey = !['auto', 'ollama'].includes(provider);
+    if (requiresKey) {
+        if (token && !selectedKeyName) {
+            return fail(`Please select a saved API key for '${provider}' in your account settings.`);
+        }
+        if (!token && !guestApiKey.trim()) {
+            return fail(`Please provide an API key for '${provider}' to continue.`);
+        }
+    }
     
     setView("loading");
     setResult(null);
@@ -1303,17 +1303,22 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
     }
     fd.append("task", task);
     if (errorLog) fd.append("error_log", errorLog);
+
+    // --- THESE TWO LINES WERE MISSING ---
+    fd.append("provider", provider);
+    if (model) fd.append("model", model);
+    
     if (token && selectedKeyName) {
-    fd.append("api_key_name", selectedKeyName);
-  } else if (!token && guestApiKey) {
-    fd.append("api_key", guestApiKey); // Sending the raw key
-  }
+      fd.append("api_key_name", selectedKeyName);
+    } else if (!token && guestApiKey) {
+      fd.append("api_key", guestApiKey); // Sending the raw key
+    }
+    
     fd.append("token_saver_enabled", String(tokenSaver));
     fd.append("abstraction_enabled", String(maxSecurity));
     fd.append("abstraction_level", maxSecurity ? "paranoid" : "standard");
     
     try {
-      // Conditionally create headers. No auth header for guests.
       const headers: HeadersInit = {};
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
@@ -1321,7 +1326,7 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
 
       const res = await fetch(`${BACKEND_URL}/api/process_code`, { 
         method: "POST", 
-        headers: headers, // Use the new headers object
+        headers: headers,
         body: fd 
       });
 
