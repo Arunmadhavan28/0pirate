@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
+    "@tailwindcss/typography": "^0.5.19",
     "@types/prismjs": "^1.26.5",
     "@types/react-transition-group": "^4.4.12",
     "framer-motion": "^12.23.12",

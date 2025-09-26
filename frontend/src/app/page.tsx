@@ -16,7 +16,7 @@ import Script from 'next/script';
 
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
-
+import ReactMarkdown from 'react-markdown';
 
 /* --- Interactive Components --- */
 
@@ -847,16 +847,27 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
 /* -------------------------------------------------
    Enhanced Account Manager
 ---------------------------------------------------*/
-function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTier, onUpgrade }: {
+function AccountManager({ 
+  token, 
+  email, 
+  savedKeys, 
+  onKeysChange, 
+  onClose, 
+  userTier, 
+  onUpgrade, 
+  activeView, 
+  setActiveView 
+}: {
   token: string | null;
   email: string | undefined;
   savedKeys: { name: string; provider: string }[];
   onKeysChange: () => void;
   onClose: () => void;
   userTier: string | null;
-  onUpgrade: () => void; // Accept the new onUpgrade prop
+  onUpgrade: () => void;
+  activeView: string;
+  setActiveView: (view: string) => void;
 }) {
-  const [activeView, setActiveView] = useState('account');
   
   const getTierBadgeProps = (tier: string | null) => {
     const tierLower = tier?.toLowerCase();
@@ -1186,7 +1197,7 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
 
   const fail = useCallback((err: string) => {
     // NOTE: Ensure your backend returns an error containing this string for quota issues
-    if (err?.includes?.("Daily job quota")) {
+    if (err?.includes?.("Daily job quota") || err?.includes?.("Authorization header")) {
       if (!token) {
         // If user is a GUEST, trigger the Auth screen
         onGuestQuotaExceeded();
@@ -1596,15 +1607,17 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
                           <Bot size={20} className="text-accent-primary" /> 
                           AI Analysis
                         </h3>
-                        <div className="bg-background-light/50 p-4 rounded-lg border border-border-primary max-h-48 overflow-y-auto">
-                          <pre className="whitespace-pre-wrap text-sm text-text-secondary leading-relaxed font-sans">
-                            {result.analysis}
-                          </pre>
-                        </div>
+                       <div className="bg-background-light/50 p-4 rounded-lg border border-border-primary max-h-48 overflow-y-auto">
+  <ReactMarkdown 
+    className="prose prose-invert prose-sm max-w-none"
+  >
+    {result.analysis}
+  </ReactMarkdown>
+</div>
                       </motion.div>
                     )}
                     
-                    <div className="flex-grow flex flex-col min-h-0">
+                    <div className="flex-grow flex flex-col min-h-0 mt-6">
                       <div className="flex justify-between items-center mb-4">
                          <h3 className="text-lg font-semibold flex items-center gap-2">
                            <Code size={20} />
@@ -1644,16 +1657,27 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
                         </div>
                       )}
                       <div className="code-output-wrapper flex-grow rounded-lg bg-code-editor border border-border-primary p-4 overflow-auto">
-                        <SyntaxHighlighter 
-                          language={language}
-                          style={atomOneDark} 
-                          wrapLines={true} 
-                          wrapLongLines={true}
-                          customStyle={{ background: 'transparent', padding: 0, margin: 0, fontSize: '14px' }}
-                        >
-                          {activeFileContent || result.notice || "No code returned."}
-                        </SyntaxHighlighter>
-                      </div>
+  <SyntaxHighlighter 
+    language={language}
+    style={atomOneDark} 
+    wrapLines={true} 
+    wrapLongLines={true}
+    customStyle={{ 
+      background: 'transparent', 
+      padding: 0, 
+      margin: 0, 
+      fontSize: '14px',
+      // --- ADD THESE TWO LINES ---
+      whiteSpace: 'pre-wrap', 
+      wordBreak: 'break-all'  
+    }}
+    // Apply the styles directly to the <pre> tag
+    useInlineStyles={true}
+    PreTag="div" 
+  >
+    {activeFileContent || result.notice || "No code returned."}
+  </SyntaxHighlighter>
+</div>
                     </div>
                 </motion.div>
               )}
@@ -1672,6 +1696,9 @@ export default function Home() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
   const [userTier, setUserTier] = useState<string | null>(null);
+
+  // --- Add this new state variable ---
+const [accountManagerView, setAccountManagerView] = useState('account');
 
   // --- CORRECT STATE MANAGEMENT for the new flow ---
   const [showLandingPage, setShowLandingPage] = useState(true);
@@ -1796,14 +1823,45 @@ export default function Home() {
             <p className="app-tagline">Secure & Refactor Your Code with AI</p>
           </motion.div>
           {user ? (
-            <motion.button onClick={() => setPanelOpen(true)} className="btn btn-secondary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <User size={16} className="group-hover:scale-110 transition-transform" /> Account
-            </motion.button>
-          ) : (
-            <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              Sign Up / Log In
-            </motion.button>
-          )}
+  <div className="flex items-center gap-3">
+    {/* NEW Green "Add API Key" Button */}
+    <motion.button 
+      onClick={() => {
+        setAccountManagerView('api_keys');
+        setPanelOpen(true);
+      }} 
+      className="btn bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 group"
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.6, delay: 0.3 }}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+    >
+      <KeyRound size={16} /> Add API Key
+    </motion.button>
+
+    {/* Updated "Account" Button */}
+    <motion.button 
+      onClick={() => {
+        setAccountManagerView('account');
+        setPanelOpen(true);
+      }} 
+      className="btn btn-secondary group"
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.6, delay: 0.2 }}
+      whileHover={{ scale: 1.05 }}
+      whileTap={{ scale: 0.95 }}
+    >
+      <User size={16} className="group-hover:scale-110 transition-transform" /> Account
+    </motion.button>
+  </div>
+) : (
+  // This part for guests remains the same
+  <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+    Sign Up / Log In
+  </motion.button>
+)}
         </header>
       )}
 
@@ -1830,7 +1888,17 @@ export default function Home() {
         {panelOpen && (
           <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPanelOpen(false)}>
             <div onClick={(e) => e.stopPropagation()}>
-              <AccountManager token={token} email={user?.email} savedKeys={savedKeys} onKeysChange={loadKeys} userTier={userTier} onClose={() => setPanelOpen(false)} onUpgrade={handleNavigateToUpgrade} />
+              <AccountManager 
+  token={token} 
+  email={user?.email} 
+  savedKeys={savedKeys} 
+  onKeysChange={loadKeys} 
+  userTier={userTier} 
+  onClose={() => setPanelOpen(false)} 
+  onUpgrade={handleNavigateToUpgrade}
+  activeView={accountManagerView}
+  setActiveView={setAccountManagerView}
+/>
             </div>
           </motion.div>
         )}
