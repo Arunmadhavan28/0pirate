@@ -104,6 +104,8 @@ body {
   border-radius: 12px;
   padding: 1rem 1.25rem;
   min-height: 250px;
+  display: flex;
+  flex-direction: column;
 }
 .code-wrapper h4 { margin: 0 0 0.75rem 0; font-size: 0.875rem; color: var(--text-secondary); font-weight: 500; }
 .code-input, .terminal-input {
@@ -116,7 +118,7 @@ body {
   resize: vertical;
   font-size: 14px;
   line-height: 1.6;
-  min-height: 200px;
+  flex-grow: 1;
 }
 .code-input:focus, .terminal-input:focus { outline: none; }
 .code-output-wrapper { overflow-x: auto; }

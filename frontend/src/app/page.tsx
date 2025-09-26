@@ -1098,6 +1098,61 @@ function ToggleSwitch({
 /* -------------------------------------------------
    Enhanced Main Application Component
 ---------------------------------------------------*/
+
+// --- ADD this entire new component above MainApp ---
+
+// Helper function to detect provider from API key format
+const detectApiKeyProvider = (key: string): string => {
+  if (key.startsWith("sk-proj-")) return "openai"; // OpenAI new format
+  if (key.startsWith("sk-")) return "anthropic"; // Anthropic (or older OpenAI)
+  if (key.length > 35 && key.length < 45 && !key.includes("-")) return "gemini"; // Heuristic for Gemini
+  return "unknown";
+};
+
+function GuestApiKeyInput({ apiKey, setApiKey, setProvider }: {
+  apiKey: string;
+  setApiKey: (key: string) => void;
+  setProvider: (provider: string) => void;
+}) {
+  const [detectedProvider, setDetectedProvider] = useState("unknown");
+
+  useEffect(() => {
+    const provider = detectApiKeyProvider(apiKey);
+    setDetectedProvider(provider);
+    if (provider !== "unknown") {
+      setProvider(provider); // Auto-select the provider in the main dropdown
+    }
+  }, [apiKey, setProvider]);
+
+  const providerInfo = {
+    openai: { icon: <Bot size={16} className="text-green-400" />, name: "OpenAI" },
+    anthropic: { icon: <Bot size={16} className="text-orange-400" />, name: "Anthropic" },
+    gemini: { icon: <Zap size={16} className="text-blue-400" />, name: "Gemini" },
+    unknown: { icon: <KeyRound size={16} className="text-text-secondary" />, name: "" },
+  };
+
+  const currentProvider = providerInfo[detectedProvider as keyof typeof providerInfo] || providerInfo.unknown;
+
+  return (
+    <div className="relative">
+      <input
+        type="password"
+        className="input-base font-mono transition-all duration-200 focus:ring-2 focus:ring-blue-500/30 pl-10"
+        placeholder="Paste your API key here to run"
+        value={apiKey}
+        onChange={(e) => setApiKey(e.target.value)}
+      />
+      <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2 text-xs font-semibold">
+        {currentProvider.icon}
+        {currentProvider.name && (
+          <span className="text-text-secondary">{currentProvider.name}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }: {
   token: string | null;
   savedKeys: { name: string; provider: string }[];
@@ -1454,7 +1509,6 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   <div className="space-y-2">
     <label className="text-sm font-medium text-text-secondary">API Key</label>
     {token ? (
-      // If user is LOGGED IN, show the dropdown of saved keys
       <select 
         className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
         value={selectedKeyName} 
@@ -1469,13 +1523,10 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
         }
       </select>
     ) : (
-      // If user is a GUEST, show a text input field
-      <input
-        type="password"
-        className="input-base font-mono transition-all duration-200 focus:ring-2 focus:ring-blue-500/30"
-        placeholder="Paste your API key here to run"
-        value={guestApiKey}
-        onChange={(e) => setGuestApiKey(e.target.value)}
+      <GuestApiKeyInput 
+        apiKey={guestApiKey} 
+        setApiKey={setGuestApiKey} 
+        setProvider={setProvider} 
       />
     )}
   </div>
