@@ -36,19 +36,18 @@ APP_NAME = "0pirate-backend"
 app = FastAPI(title=APP_NAME)
 
 origins = [
+    # This regular expression allows localhost, 0pirate.com, and any subdomain of 0pirate.com
+    r"http://localhost:3000",
+    r"https://.*\.0pirate\.com",
     "https://0pirate.com",
-    "https://0pirate-kx9ac2jzj-0pirates-projects.vercel.app",
-    "https://www.0pirate.com", 
-    "http://localhost:3000",
-    "https://backend-muddy-moon-310.fly.dev",
-    "https://api.0pirate.com",  
+    "https://backend-muddy-moon-310.fly.dev", # Your backend's own origin
+    "https://api.0pirate.com"
 ]
-
-
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins, # Use the specific list here
+    allow_origins=origins,
+    allow_origin_regex=r"https://.*\.0pirate\.com|http://localhost:3000", # Use regex here
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
