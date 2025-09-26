@@ -200,13 +200,12 @@ const LoadingSpinner = ({ size = 20, className = "" }: { size?: number; classNam
 /* -------------------------------------------------
    Redesigned Auth Component
 ---------------------------------------------------*/
-const AuthComponent = () => {
+const AuthComponent = ({ onAuthSuccess }: { onAuthSuccess: () => void; }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isPasswordFocused, setIsPasswordFocused] = useState(false); // State for password focus
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,8 +213,14 @@ const AuthComponent = () => {
     setLoading(true);
     try {
       const authMethod = isSignUp ? supabase.auth.signUp : supabase.auth.signInWithPassword;
-      const { error } = await authMethod({ email, password });
-      if (error) setError(error.message);
+      const { error, data } = await authMethod({ email, password });
+      if (error) {
+        setError(error.message);
+      } else if (data.user || data.session) {
+        onAuthSuccess(); // Close the modal on success
+      } else {
+         setError("Please check your email to verify your account.");
+      }
     } catch (err: any) {
       setError(err?.message || "An unexpected error occurred.");
     } finally {
@@ -239,16 +244,15 @@ const AuthComponent = () => {
         variants={fadeInUp}
         initial="initial"
         animate="animate"
-        transition={{ duration: 0.6 }}
       >
         <div className="flex justify-center mb-6">
-          <InteractiveBotIcon isPasswordActive={isPasswordFocused} />
+          <InteractiveBotIcon />
         </div>
         <h1 className="flex items-center justify-center gap-3 text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
           0Pirate
         </h1>
         <p className="text-text-secondary mt-3 text-lg">
-          {isSignUp ? "Create your account to get started" : "Welcome back to the future of code"}
+          {isSignUp ? "Create a free account to continue" : "Welcome back! Sign in"}
         </p>
       </motion.div>
       
@@ -257,111 +261,84 @@ const AuthComponent = () => {
         variants={scaleIn}
         initial="initial"
         animate="animate"
-        transition={{ duration: 0.5, delay: 0.2 }}
       >
-        <motion.div 
-          className="auth-social-buttons"
-          variants={staggerContainer}
-          initial="initial"
-          animate="animate"
-        >
+        <div className="auth-social-buttons flex flex-col gap-3">
           <motion.button 
             onClick={() => oauth("github")} 
-            className="btn btn-secondary auth-social-button group"
+            className="btn btn-secondary auth-social-button"
             variants={fadeInUp}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
           >
-            <Github size={18} className="group-hover:scale-110 transition-transform" /> 
+            <Github size={18} /> 
             Continue with GitHub
           </motion.button>
           <motion.button 
             onClick={() => oauth("google")} 
-            className="btn btn-secondary auth-social-button group"
+            className="btn btn-secondary auth-social-button"
             variants={fadeInUp}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
           >
-            <Mail size={18} className="group-hover:scale-110 transition-transform" /> 
+            <Mail size={18} /> 
             Continue with Google
           </motion.button>
-        </motion.div>
+        </div>
         
         <div className="auth-divider">or continue with email</div>
         
         <form onSubmit={handleAuth} className="flex flex-col gap-4">
           <motion.input 
-            className="input-base focus:ring-2 focus:ring-blue-500/30 transition-all" 
+            className="input-base" 
             type="email" 
-            placeholder="Enter your email address" 
+            placeholder="Enter your email" 
             value={email} 
             onChange={(e) => setEmail(e.target.value)} 
             required 
             variants={fadeInUp}
-            initial="initial"
-            animate="animate"
           />
           <motion.input 
-            className="input-base focus:ring-2 focus:ring-blue-500/30 transition-all" 
+            className="input-base" 
             type="password" 
             placeholder="Enter your password" 
             value={password} 
             onChange={(e) => setPassword(e.target.value)} 
             required 
             variants={fadeInUp}
-            initial="initial"
-            animate="animate"
-            onFocus={() => setIsPasswordFocused(true)}
-            onBlur={() => setIsPasswordFocused(false)}
           />
           <motion.button 
             type="submit" 
             disabled={loading} 
-            className="btn btn-primary w-full relative overflow-hidden"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            className="btn btn-primary w-full"
             variants={fadeInUp}
-            initial="initial"
-            animate="animate"
           >
-            {loading ? (
-              <div className="flex items-center justify-center gap-2">
-                <LoadingSpinner size={16} />
-                Processing...
-              </div>
-            ) : (
-              isSignUp ? "Create Account" : "Sign In"
-            )}
+            {loading ? <LoadingSpinner size={16} /> : (isSignUp ? "Create Account" : "Sign In")}
           </motion.button>
         </form>
         
         <AnimatePresence>
           {error && (
             <motion.div
-              className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
+              className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-center"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
             >
-              <p className="text-red-400 text-sm text-center">{error}</p>
+              <p className="text-red-400 text-sm">{error}</p>
             </motion.div>
           )}
         </AnimatePresence>
         
         <p className="text-center text-sm text-text-secondary mt-6">
           {isSignUp ? "Already have an account?" : "Don't have an account?"}
-          <motion.button 
+          <button 
             onClick={() => setIsSignUp(!isSignUp)} 
-            className="btn btn-link text-accent-primary hover:text-accent-primary-hover ml-2 px-0 py-0 h-auto font-medium"
-            whileHover={{ scale: 1.05 }}
+            className="btn btn-link text-accent-primary font-medium ml-2"
           >
             {isSignUp ? "Sign In" : "Sign Up"}
-          </motion.button>
+          </button>
         </p>
       </motion.div>
     </div>
   );
 };
+
 
 /* -------------------------------------------------
    Enhanced Claude-style Onboarding View
