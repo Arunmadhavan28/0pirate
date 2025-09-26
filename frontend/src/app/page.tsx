@@ -1108,6 +1108,7 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   const [copyOK, setCopyOK] = useState("");
   const [view, setView] = useState<ViewState>("idle");
   const [selectedKeyName, setSelectedKeyName] = useState("");
+  const [guestApiKey, setGuestApiKey] = useState("");
 
   const [inputMode, setInputMode] = useState<'paste' | 'upload'>('paste');
   const [files, setFiles] = useState<File[]>([]);
@@ -1212,12 +1213,16 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   
   const submit = async () => {
     if (!pastedCode.trim() && files.length === 0) return fail("Please paste or upload your code.");
-    
-    // This check is still relevant for users who want to use their own keys
-    const requiresKey = !['auto', 'ollama'].includes(provider);
-    if (requiresKey && !selectedKeyName) { 
-      return fail(`Please save an API key for '${provider}' in your account settings.`); 
-    }
+  
+  const requiresKey = !['auto', 'ollama'].includes(provider);
+  if (requiresKey) {
+      if (token && !selectedKeyName) {
+          return fail(`Please select a saved API key for '${provider}' in your account settings.`);
+      }
+      if (!token && !guestApiKey.trim()) {
+          return fail(`Please provide an API key for '${provider}' to continue.`);
+      }
+  }
     
     setView("loading");
     setResult(null);
@@ -1232,9 +1237,11 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
     }
     fd.append("task", task);
     if (errorLog) fd.append("error_log", errorLog);
-    fd.append("provider", provider);
-    if (model) fd.append("model", model);
-    if (selectedKeyName) fd.append("api_key_name", selectedKeyName);
+    if (token && selectedKeyName) {
+    fd.append("api_key_name", selectedKeyName);
+  } else if (!token && guestApiKey) {
+    fd.append("api_key", guestApiKey); // Sending the raw key
+  }
     fd.append("token_saver_enabled", String(tokenSaver));
     fd.append("abstraction_enabled", String(maxSecurity));
     fd.append("abstraction_level", maxSecurity ? "paranoid" : "standard");
@@ -1431,24 +1438,37 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
                   </select>
                 </div>
               </div>
-              {provider !== 'auto' && provider !== 'ollama' && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-text-secondary">API Key</label>
-                  <select 
-                    className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                    value={selectedKeyName} 
-                    onChange={(e) => setSelectedKeyName(e.target.value)} 
-                    disabled={savedKeys.filter(k => k.provider === provider).length === 0}
-                  >
-                    {savedKeys.filter(k => k.provider === provider).length === 0 ? 
-                      (<option value="">No keys saved for {provider}</option>) : 
-                      (savedKeys.filter(key => key.provider === provider).map((key) => (
-                        <option key={key.name} value={key.name}>{key.name}</option>
-                      )))
-                    }
-                  </select>
-                </div>
-              )}
+              // --- REPLACE the API Key dropdown block with this ---
+{provider !== 'auto' && provider !== 'ollama' && (
+  <div className="space-y-2">
+    <label className="text-sm font-medium text-text-secondary">API Key</label>
+    {token ? (
+      // If user is LOGGED IN, show the dropdown of saved keys
+      <select 
+        className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+        value={selectedKeyName} 
+        onChange={(e) => setSelectedKeyName(e.target.value)} 
+        disabled={savedKeys.filter(k => k.provider === provider).length === 0}
+      >
+        {savedKeys.filter(k => k.provider === provider).length === 0 ? 
+          (<option value="">Go to Account to add a key</option>) : 
+          (savedKeys.filter(key => key.provider === provider).map((key) => (
+            <option key={key.name} value={key.name}>{key.name}</option>
+          )))
+        }
+      </select>
+    ) : (
+      // If user is a GUEST, show a text input field
+      <input
+        type="password"
+        className="input-base font-mono transition-all duration-200 focus:ring-2 focus:ring-blue-500/30"
+        placeholder="Paste your API key here to run"
+        value={guestApiKey}
+        onChange={(e) => setGuestApiKey(e.target.value)}
+      />
+    )}
+  </div>
+)}
             </motion.div>
 
             {/* Settings Toggles */}
