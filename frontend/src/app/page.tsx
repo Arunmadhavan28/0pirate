@@ -1251,22 +1251,22 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   }, []);
 
   const fail = useCallback((err: string) => {
-    // NOTE: Ensure your backend returns an error containing this string for quota issues
-    if (err?.includes?.("Daily job quota") || err?.includes?.("Authorization header")) {
-      if (!token) {
-        // If user is a GUEST, trigger the Auth screen
-        onGuestQuotaExceeded();
-      } else {
-        // If user is LOGGED IN, trigger the Upgrade/Pricing screen
-        onUserQuotaExceeded();
-      }
+  // Check for any kind of quota error message from the backend
+  if (err?.includes?.("quota exceeded")) {
+    if (!token) {
+      // If user is a GUEST, trigger the Auth screen
+      onGuestQuotaExceeded();
     } else {
-      // For all other errors
-      setResult({ notice: `Error: ${err}` });
-      setView("error");
+      // If user is LOGGED IN, trigger the Upgrade/Pricing screen
+      onUserQuotaExceeded();
     }
-    setStatus("Analysis failed");
-  }, [token, onGuestQuotaExceeded, onUserQuotaExceeded]); // Dependencies
+  } else {
+    // For all other errors
+    setResult({ notice: `Error: ${err}` });
+    setView("error");
+  }
+  setStatus("Analysis failed");
+}, [token, onGuestQuotaExceeded, onUserQuotaExceeded]);
   
   useJobPolling(jobId, token, success, fail, setStatus);
 
@@ -1776,8 +1776,10 @@ const [accountManagerView, setAccountManagerView] = useState('account');
   };
 
   const handleGuestQuotaExceeded = () => {
-    setShowAuthPage(true);
-  };
+  alert("You've used your 2 free analyses for the day. Your quota resets at 5:30 AM IST. Please sign up to continue.");
+  setShowAuthPage(true);
+};
+
 
   const handleUserQuotaExceeded = () => {
     handleNavigateToUpgrade();

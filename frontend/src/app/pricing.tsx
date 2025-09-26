@@ -82,45 +82,44 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan, isUpgr
           
           switch(plan.id) {
             case 'free':
-              updatedPlan.description = "Perfect for individuals and hobby projects";
+              updatedPlan.name = "Free: The Organizer";
+              updatedPlan.description = "Perfect for individuals and hobbyists ready to streamline their workflow.";
               updatedPlan.features = [
-                "2 Jobs per day",
-                "5 Files per job", 
-                "Core security features",
-                "Access to all AI models",
-                "Community support",
-                "Basic code analysis"
+                "2 Jobs per day (BYOK)",
+                "Save & manage your API keys",
+                "View your job history",
+                "Analyze up to 5 files per job",
+                "Full model access with your key",
               ];
-              updatedPlan.icon = <Zap className="w-6 h-6" />;
+              updatedPlan.icon = <User className="w-6 h-6" />;
               break;
               
             case 'developer':
-              updatedPlan.description = "The complete toolkit for professional developers";
+              updatedPlan.name = "Developer: The Power User";
+              updatedPlan.description = "The essential toolkit for professional developers who demand speed and efficiency.";
               updatedPlan.features = [
-                "50 Jobs per day",
-                "20 Files per job",
-                "Advanced security scanning",
-                "Priority AI model access",
-                "CI/CD integration via API",
-                "Email support",
-                "Custom security rules",
-                "Detailed reporting"
+                "50 Jobs per day (a 25x Increase)",
+                "Handle up to 20 files per job",
+                "Advanced Security Scanning",
+                "Custom Security Rules",
+                "Detailed Reporting",
+                "Priority Email Support",
               ];
               updatedPlan.icon = <Star className="w-6 h-6" />;
               updatedPlan.popular = true;
               break;
               
             case 'professional':
-              updatedPlan.description = "For growing teams that need to collaborate securely";
+              updatedPlan.name = "Professional: The Team Leader";
+              updatedPlan.description = "For growing teams that need to collaborate securely and scale their operations.";
               updatedPlan.features = [
-                "200 Jobs per day",
-                "50 Files per job",
-                "5 Team seats included",
-                "Priority email & chat support",
+                "200 Jobs per day (a 100x Increase)",
+                "Scale to 50 files per job",
+                "Includes 5 team seats",
                 "Team management dashboard",
-                "Advanced analytics",
-                "Custom integrations",
-                "All developer features"
+                "Advanced analytics & integrations",
+                "Priority email & chat support",
+                "All Developer features",
               ];
               updatedPlan.icon = <Users className="w-6 h-6" />;
               updatedPlan.highlight = true;
@@ -153,17 +152,17 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan, isUpgr
 
   const enterprisePlan = {
     id: 'enterprise',
-    name: 'Enterprise',
-    description: 'Custom solutions for large organizations',
+    name: 'Enterprise: The Strategic Partner',
+    description: 'Custom-built solutions for organizations requiring enterprise-grade security, scale, and support.',
     features: [
-      "Unlimited job quotas",
-      "Dedicated account manager", 
-      "99.9% uptime SLA",
-      "SSO & audit logs",
-      "Custom onboarding",
-      "Priority phone support",
-      "Advanced compliance tools",
-      "Custom reporting"
+      "Unlimited Job Quotas",
+      "Dedicated Account Manager & Support",
+      "99.9% Uptime SLA",
+      "SSO & Advanced Audit Logs",
+      "Custom Onboarding & Training",
+      "Private Deployment Options",
+      "Advanced Compliance Tools",
+      "Bespoke Reporting & Analytics"
     ],
     icon: <Building2 className="w-6 h-6" />
   };
@@ -375,19 +374,23 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan, isUpgr
         }
 
         .popular-badge {
-          position: absolute;
-          top: -1px;
-          left: 50%;
-          transform: translateX(-50%);
-          background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-          color: white;
-          padding: 8px 24px;
-          border-radius: 0 0 12px 12px;
-          font-size: 14px;
-          font-weight: 700;
-          z-index: 20;
-          box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
-        }
+  position: absolute;
+  top: -1px;
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
+  width: fit-content;
+  /* ... other styles remain the same ... */
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  padding: 8px 24px;
+  border-radius: 0 0 12px 12px;
+  font-size: 14px;
+  font-weight: 700;
+  z-index: 20;
+  box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.4);
+}
 
         .savings-badge {
           position: absolute;
