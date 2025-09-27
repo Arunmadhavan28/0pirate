@@ -110,7 +110,7 @@ const MODEL_OPTIONS: Record<string, string[]> = {
   auto: ["(auto-select)"],
   openai: ["gpt-4o-mini", "gpt-4o"],
   anthropic: ["claude-3-haiku-20240307", "claude-3.5-sonnet-20240620"],
-  gemini: ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash", "gemini-2.5-pro"],
+  gemini: ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest"],
   deepseek: ["deepseek-chat"],
   mistral: ["mistral-large-latest"],
   groq: ["llama-3.1-8b-instant", "llama-3.1-70b-versatile"],
