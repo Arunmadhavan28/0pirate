@@ -36,11 +36,14 @@ class GlobalExceptionMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
             return response
+        # --- THIS IS THE FIX ---
+        # It now checks if the exception is an HTTPException and ignores it,
+        # letting FastAPI handle it correctly.
+        except HTTPException as http_exc:
+            raise http_exc
         except Exception as exc:
             logger.error(f"Global error at {request.url}: {traceback.format_exc()}")
-            return JSONResponse(status_code=500, content={"detail": "Internal server error occurred."})
-
-app.add_middleware(GlobalExceptionMiddleware)
+            return JSONResponse(status_code=500, content={"detail": "An internal server error occurred."})
 
 # CORS configuration (allows your frontend origins)
 origins = [
