@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
 from starlette.middleware.base import BaseHTTPMiddleware
+from fastapi.exceptions import RequestValidationError
 
 from src.config import settings
 from src.secure_wrapper import process_code_submission
@@ -29,22 +30,22 @@ logger = logging.getLogger("server")
 APP_NAME = "0pirate-backend"
 app = FastAPI(title=APP_NAME)
 
+# Global middleware to catch exceptions and ensure responses
 class GlobalExceptionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         try:
-            return await call_next(request)
+            response = await call_next(request)
+            return response
         except Exception as exc:
-            logger.error(f"Global error: {traceback.format_exc()}", exc_info=True)
-            return JSONResponse(
-                status_code=500,
-                content={"detail": "Internal server error occurred."}
-            )
+            logger.error(f"Global error at {request.url}: {traceback.format_exc()}")
+            return JSONResponse(status_code=500, content={"detail": "Internal server error occurred."})
 
 app.add_middleware(GlobalExceptionMiddleware)
 
+# CORS configuration (allows your frontend origins)
 origins = [
-    r"http://localhost:3000",
-    r"https://.*\.0pirate\.com",
+    "http://localhost:3000",
+    "https://*.0pirate.com",
     "https://0pirate.com",
     "https://backend-muddy-moon-310.fly.dev",
     "https://api.0pirate.com"
@@ -58,6 +59,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Explicit handlers for validation and general exceptions (ensures CORS on errors)
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error(f"Validation error at {request.url}: {exc}")
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception at {request.url}: {traceback.format_exc()}")
+    return JSONResponse(status_code=500, content={"detail": "Internal server error occurred."})
 
 if not settings.supabase_url or not settings.supabase_key:
     raise RuntimeError("SUPABASE_URL and SUPABASE_KEY must be set in config.py")
@@ -87,7 +99,7 @@ async def get_current_user(req: Request) -> dict:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-
+    
 async def get_optional_current_user(req: Request) -> Optional[dict]:
     auth_header = req.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -144,6 +156,30 @@ async def check_anonymous_quota(req: Request):
         logger.error(f"Anonymous quota check failed for IP {ip}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Quota check failed")
 
+def get_api_key_for_provider(provider_name: str, user_api_key: Optional[str] = None) -> Optional[str]:
+    provider_name = provider_name.lower()
+
+    if user_api_key:
+        user_api_key = user_api_key.strip()
+        if len(user_api_key) < 10:
+            raise HTTPException(status_code=400, detail="Invalid API key provided.")
+        return user_api_key
+
+    if provider_name in ["openai", "gpt"]:
+        return settings.openai_key
+    elif provider_name == "gemini":
+        return settings.google_key
+    elif provider_name == "claude":
+        return settings.anthropic_key
+    elif provider_name == "deepseek":
+        return settings.deepseek_key
+    elif provider_name == "mistral":
+        return settings.mistral_key
+    elif provider_name == "groq":
+        return settings.groq_key
+    else:
+        return None
+
 class ApiKeyRequest(BaseModel):
     provider: str
     name: str
@@ -164,7 +200,7 @@ async def save_api_key(req: Request, body: ApiKeyRequest, user: dict = Depends(g
         }).execute()
         return JSONResponse({"status": "ok", "provider": body.provider, "name": body.name})
     except Exception as e:
-        logger.error("Failed to save API key for user %s: %s", user_id, e, exc_info=True)
+        logger.error(f"Failed to save API key for user {user_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to save key.")
 
 @app.delete("/api/keys")
@@ -177,7 +213,7 @@ async def delete_api_key(req: Request, body: ApiKeyDeleteRequest, user: dict = D
         }).execute()
         return JSONResponse({"status": "ok", "message": f"Key '{body.name}' deleted."})
     except Exception as e:
-        logger.error(f"Failed to delete API key with name {body.name}: {e}")
+        logger.error(f"Failed to delete API key with name {body.name}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to delete key")
 
 @app.get("/api/keys")
@@ -187,7 +223,7 @@ async def get_user_keys(user: dict = Depends(get_current_user)):
         resp = supabase.rpc("get_user_api_keys", {"p_user_id": user_id}).execute()
         return JSONResponse({"keys": resp.data or []})
     except Exception as e:
-        logger.error(f"Could not retrieve keys for user {user_id}: {e}")
+        logger.error(f"Could not retrieve keys for user {user_id}: {str(e)}", exc_info=True)
         return JSONResponse({"keys": []})
     
 @app.get("/api/plans")
@@ -239,7 +275,7 @@ async def get_plans(req: Request):
 
         return JSONResponse({"plans": formatted_plans})
     except Exception as e:
-        logger.error(f"Failed to fetch plans: {e}")
+        logger.error(f"Failed to fetch plans: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not retrieve pricing plans.")
     
 class CreateOrderRequest(BaseModel):
@@ -288,7 +324,7 @@ async def create_order(req: Request, body: CreateOrderRequest, user: dict = Depe
             "currency": order["currency"]
         })
     except Exception as e:
-        logger.error(f"Error creating Razorpay order for user {user_id}: {e}")
+        logger.error(f"Error creating Razorpay order for user {user_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not create payment order.")
 
 @app.post("/api/razorpay-webhook")
@@ -317,7 +353,7 @@ async def razorpay_webhook(req: Request, x_razoray_signature: Annotated[str | No
 
         return JSONResponse(content={"status": "ok"})
     except Exception as e:
-        logger.error(f"Webhook verification failed or error during processing: {e}")
+        logger.error(f"Webhook verification failed or error during processing: {str(e)}", exc_info=True)
         raise HTTPException(status_code=400, detail="Invalid webhook signature or processing error")
 
 class ProcessRequestForm:
@@ -371,6 +407,7 @@ async def api_process_code(
                 decrypted_resp = supabase.rpc("reveal_secret", {"secret_id": secret_id}).execute()
                 api_key = decrypted_resp.data
             except Exception as e:
+                logger.error(f"Could not retrieve saved API key: {str(e)}", exc_info=True)
                 raise HTTPException(status_code=500, detail="Could not retrieve your saved API key.")
     else:
         ip_address = req.client.host
@@ -439,7 +476,7 @@ async def call_llm_and_process(payload: dict) -> dict:
         )
         return {"success": True, **result_dict}
     except Exception as e:
-        logger.error("Job failed: %s", e, exc_info=True)
+        logger.error(f"Job failed: {str(e)}", exc_info=True)
         return {"success": False, "notice": "An internal error occurred during processing."}
 
 async def process_job_background(job_id: str, payload: dict):
@@ -486,10 +523,11 @@ async def get_job_status(req: Request, job_id: str, user: Optional[dict] = Depen
                 return JSONResponse(db_job)
             if not user and db_job.get("ip_address") == req.client.host:
                 return JSONResponse(db_job)
+        else:
+            raise HTTPException(status_code=404, detail="Job not found")
     except Exception as e:
-        logger.debug(f"Failed to fetch job from Supabase: {e}")
-
-    raise HTTPException(status_code=404, detail="Job not found or not authorized")
+        logger.error(f"Failed to fetch job {job_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=404, detail="Job not found or not authorized")
 
 @app.get("/health")
 async def health_check():
