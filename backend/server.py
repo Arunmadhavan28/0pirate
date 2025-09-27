@@ -19,9 +19,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
 from supabase.lib.client_options import ClientOptions
+from starlette.middleware.base import BaseHTTPMiddleware  # Added this import
 
 from src.config import settings
-from src.secure_wrapper import process_code_submission
+from src.secure_wrapper import process_code_submission  # Assuming this is defined elsewhere
 
 # -------------------------------------------
 # Logging
@@ -35,19 +36,31 @@ logger = logging.getLogger("server")
 APP_NAME = "0pirate-backend"
 app = FastAPI(title=APP_NAME)
 
+class GlobalExceptionMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        try:
+            return await call_next(request)
+        except Exception as exc:
+            logger.error(f"Global error: {traceback.format_exc()}")
+            return JSONResponse(
+                status_code=500,
+                content={"detail": "Internal server error occurred."}
+            )
+
+app.add_middleware(GlobalExceptionMiddleware)
+
 origins = [
-    # This regular expression allows localhost, 0pirate.com, and any subdomain of 0pirate.com
     r"http://localhost:3000",
     r"https://.*\.0pirate\.com",
     "https://0pirate.com",
-    "https://backend-muddy-moon-310.fly.dev", # Your backend's own origin
+    "https://backend-muddy-moon-310.fly.dev",
     "https://api.0pirate.com"
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.0pirate\.com|http://localhost:3000", # Use regex here
+    allow_origin_regex=r"https://.*\.0pirate\.com|http://localhost:3000",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,16 +71,12 @@ if not settings.supabase_url or not settings.supabase_key:
 
 supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 
-# Admin client for accessing Vault securely is not needed here
-# as RPC functions handle the security context.
-
 JOB_STORE: Dict[str, Dict[str, Any]] = {}
 
 # -------------------------------------------
-# Auth, Tier, and Key Management (Full Implementation)
+# Auth, Tier, and Key Management
 # -------------------------------------------
 async def get_current_user(req: Request) -> dict:
-    """Securely validates the Supabase JWT and returns user data."""
     auth_header = req.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
@@ -83,7 +92,6 @@ async def get_current_user(req: Request) -> dict:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     
 async def get_optional_current_user(req: Request) -> Optional[dict]:
-    """Tries to validate the Supabase JWT but returns None if it's missing or invalid."""
     auth_header = req.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return None
@@ -101,11 +109,10 @@ TIER_LIMITS = {
     "free": {"max_jobs_per_day": 2, "max_files": 5},
     "developer": {"max_jobs_per_day": 50, "max_files": 20},
     "professional": {"max_jobs_per_day": 200, "max_files": 50},
-    "enterprise": {"max_jobs_per_day": 500, "max_files": 100}, # For custom plans
+    "enterprise": {"max_jobs_per_day": 500, "max_files": 100},
 }
 
 async def get_user_tier(user_id: str) -> str:
-    """Securely fetches the user's tier from the 'profiles' table."""
     try:
         resp = supabase.table("profiles").select("tier").eq("id", user_id).single().execute()
         if resp.data and resp.data.get("tier"):
@@ -114,40 +121,60 @@ async def get_user_tier(user_id: str) -> str:
         logger.error(f"Could not fetch tier for user {user_id}: {e}")
     return "free"
 
-  
+# Added quota check functions (were missing)
+async def check_tier_quota(user_id: str, tier: str):
+    limits = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
+    try:
+        # Example: Count jobs today (adjust query as needed)
+        today = datetime.utcnow().date().isoformat()
+        count_resp = supabase.table("jobs").select("count(*)").eq("user_id", user_id).gte("created_at", today).execute()
+        job_count = count_resp.data[0]["count"] if count_resp.data else 0
+        if job_count >= limits["max_jobs_per_day"]:
+            raise HTTPException(status_code=429, detail="Daily job limit exceeded for your tier")
+    except Exception as e:
+        logger.error(f"Quota check failed: {e}")
+        raise HTTPException(status_code=500, detail="Quota check failed")
+
+async def check_anonymous_quota(req: Request):
+    ip = req.client.host
+    try:
+        # Example: Count anonymous jobs today by IP
+        today = datetime.utcnow().date().isoformat()
+        count_resp = supabase.table("jobs").select("count(*)").eq("ip_address", ip).is_("user_id", None).gte("created_at", today).execute()
+        job_count = count_resp.data[0]["count"] if count_resp.data else 0
+        if job_count >= TIER_LIMITS["free"]["max_jobs_per_day"]:
+            raise HTTPException(status_code=429, detail="Daily anonymous job limit exceeded")
+    except Exception as e:
+        logger.error(f"Anonymous quota check failed: {e}")
+        raise HTTPException(status_code=500, detail="Quota check failed")
+
 class ApiKeyRequest(BaseModel):
     provider: str
-    name: str  # NEW: Custom name for the key
+    name: str
     api_key: str
 
 class ApiKeyDeleteRequest(BaseModel):
-    name: str  # CHANGED: We now delete by name
+    name: str
 
 @app.post("/api/keys")
 async def save_api_key(req: Request, body: ApiKeyRequest, user: dict = Depends(get_current_user)):
     user_id = user["id"]
     try:
-        # The Python server securely gets the user_id from the token and passes it to the RPC.
-        # THIS IS THE FIX: We are now correctly passing the p_user_id parameter.
         supabase.rpc("upsert_user_api_key", {
             "p_user_id": user_id,
             "p_provider": body.provider.lower(),
             "p_name": body.name,
             "p_api_key": body.api_key
         }).execute()
-
         return JSONResponse({"status": "ok", "provider": body.provider, "name": body.name})
     except Exception as e:
         logger.error("Failed to save API key for user %s: %s", user_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to save key.")
-
-
+        raise HTTPException(status_code=500, detail="Failed to save key.")
 
 @app.delete("/api/keys")
 async def delete_api_key(req: Request, body: ApiKeyDeleteRequest, user: dict = Depends(get_current_user)):
     user_id = user["id"]
     try:
-        # The Python server securely gets the user_id and passes it to the RPC.
         supabase.rpc("delete_user_api_key", {
             "p_user_id": user_id,
             "p_key_name": body.name
@@ -161,7 +188,6 @@ async def delete_api_key(req: Request, body: ApiKeyDeleteRequest, user: dict = D
 async def get_user_keys(user: dict = Depends(get_current_user)):
     user_id = user["id"]
     try:
-        # It must call the 'get_user_api_keys' RPC function
         resp = supabase.rpc("get_user_api_keys", {"p_user_id": user_id}).execute()
         return JSONResponse({"keys": resp.data or []})
     except Exception as e:
@@ -170,16 +196,7 @@ async def get_user_keys(user: dict = Depends(get_current_user)):
     
 @app.get("/api/plans")
 async def get_plans(req: Request):
-    """
-    Fetches plans and returns prices based on user's country.
-    Defaults to USD if the country is not India.
-    """
-    # In production, this IP would come from a header like 'X-Forwarded-For'.
-    # We'll simulate the logic for local testing.
-     # Vercel provides the 'x-vercel-ip-country' header with the user's country code.
     country = req.headers.get("x-vercel-ip-country")
-
-    # Fallback for local development if the header isn't present
     if not country:
         client_ip = req.client.host 
         country = "IN" if client_ip in ("127.0.0.1", "localhost") else "US"
@@ -191,7 +208,6 @@ async def get_plans(req: Request):
         plan_yearly_col = "razorpay_plan_id_yearly_inr"
         currency = "INR"
     else:
-        # Default to US Dollar prices for everyone else
         price_monthly_col = "price_monthly_usd"
         price_yearly_col = "price_yearly_usd"
         plan_monthly_col = "razorpay_plan_id_monthly_usd"
@@ -199,7 +215,6 @@ async def get_plans(req: Request):
         currency = "USD"
 
     try:
-        # Fetch the relevant columns from the Supabase table
         resp = supabase.table("plans") \
             .select(f"id, name, features, {price_monthly_col}, {price_yearly_col}, {plan_monthly_col}, {plan_yearly_col}") \
             .eq("active", True) \
@@ -209,7 +224,6 @@ async def get_plans(req: Request):
         if not resp.data:
             return JSONResponse({"plans": []})
 
-        # Structure the data cleanly for the frontend to use
         formatted_plans = []
         for plan in resp.data:
             formatted_plans.append({
@@ -232,31 +246,22 @@ async def get_plans(req: Request):
         logger.error(f"Failed to fetch plans: {e}")
         raise HTTPException(status_code=500, detail="Could not retrieve pricing plans.")
     
-# Add this Pydantic model with your other models
 class CreateOrderRequest(BaseModel):
     plan_id: str
-    billing_cycle: str # 'monthly' or 'yearly'
+    billing_cycle: str
 
-# Initialize the Razorpay client (place this near your Supabase client)
 razorpay_client = razorpay.Client(
     auth=(settings.razorpay_key_id, settings.razorpay_key_secret)
 )
 
-# Add this new endpoint
 @app.post("/api/create-order")
 async def create_order(req: Request, body: CreateOrderRequest, user: dict = Depends(get_current_user)):
     user_id = user["id"]
-    
-    # --- THIS IS THE FIX ---
-    # Use the Vercel header to get the user's country
     country = req.headers.get("x-vercel-ip-country")
-
-    # Fallback for local development if the header isn't present
     if not country:
         client_ip = req.client.host
         country = "IN" if client_ip in ("127.0.0.1", "localhost") else "US"
 
-    # Determine which database columns to use based on location and billing cycle
     if country == "IN":
         price_col = f"price_{body.billing_cycle}_inr"
         currency = "INR"
@@ -265,7 +270,6 @@ async def create_order(req: Request, body: CreateOrderRequest, user: dict = Depe
         currency = "USD"
     
     try:
-        # Fetch the plan price from your Supabase 'plans' table
         plan_resp = supabase.table("plans").select(price_col).eq("id", body.plan_id).single().execute()
         if not plan_resp.data:
             raise HTTPException(status_code=404, detail="Plan not found")
@@ -279,7 +283,6 @@ async def create_order(req: Request, body: CreateOrderRequest, user: dict = Depe
             "notes": { "user_id": user_id, "plan_id": body.plan_id }
         }
         
-        # Create the order with Razorpay
         order = razorpay_client.order.create(data=order_data)
         
         return JSONResponse({
@@ -288,7 +291,6 @@ async def create_order(req: Request, body: CreateOrderRequest, user: dict = Depe
             "amount": order["amount"],
             "currency": order["currency"]
         })
-
     except Exception as e:
         logger.error(f"Error creating Razorpay order for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail="Could not create payment order.")
@@ -296,20 +298,16 @@ async def create_order(req: Request, body: CreateOrderRequest, user: dict = Depe
 @app.post("/api/razorpay-webhook")
 async def razorpay_webhook(req: Request, x_razoray_signature: Annotated[str | None, Header()] = None):
     print("--- WEBHOOK FUNCTION IS RUNNING THE LATEST CODE ---")
-    # Read the request body ONCE
     body = await req.body()
     try:
-        # Decode the raw body to a string
         payload_str = body.decode('utf-8')
         
-        # Use the decoded string to verify the signature
         razorpay_client.utility.verify_webhook_signature(
             payload_str,
             x_razoray_signature,
             settings.razorpay_webhook_secret
         )
         
-        # Parse the SAME string into a JSON object
         webhook_data = json.loads(payload_str)
         event = webhook_data.get("event")
 
@@ -322,28 +320,22 @@ async def razorpay_webhook(req: Request, x_razoray_signature: Annotated[str | No
             logger.info(f"Successfully upgraded user {user_id} to plan {plan_id}")
 
         return JSONResponse(content={"status": "ok"})
-
     except Exception as e:
         logger.error(f"Webhook verification failed or error during processing: {e}")
         raise HTTPException(status_code=400, detail="Invalid webhook signature or processing error")
 
-
-
-
-
 # -------------------------------------------
-# PROCESSING ENDPOINT (CORRECTED AND FINAL)
+# PROCESSING ENDPOINT
 # -------------------------------------------
 class ProcessRequestForm:
-    """Handles form data for both logged-in and anonymous users."""
     def __init__(
         self,
         task: str = Form(...),
         provider: str = Form(...),
         error_log: Optional[str] = Form(None),
         model: Optional[str] = Form(None),
-        api_key_name: Optional[str] = Form(None), # Optional for guests
-        api_key: Optional[str] = Form(None),     # Optional for logged-in users
+        api_key_name: Optional[str] = Form(None),
+        api_key: Optional[str] = Form(None),
         token_saver_enabled: Optional[bool] = Form(False),
         abstraction_enabled: Optional[bool] = Form(True),
         abstraction_level: Optional[str] = Form("paranoid"),
@@ -370,20 +362,15 @@ async def api_process_code(
     api_key = form_data.api_key
 
     if user:
-        # --- LOGGED-IN USER LOGIC ---
         user_id = user["id"]
         user_tier = await get_user_tier(user_id)
-        
-        # 1. First, check their daily job quota.
         await check_tier_quota(user_id, user_tier)
         
-        # 2. Then, ensure they have provided a key to use.
         if form_data.provider.lower() not in ["auto", "ollama"] and not form_data.api_key_name:
             raise HTTPException(status_code=400, detail="Please select a saved API key.")
         
         if form_data.api_key_name:
             try:
-                # Fetches the user's saved API key
                 key_ref_resp = supabase.table("user_api_keys").select("encrypted_api_key_id").eq("user_id", user_id).eq("name", form_data.api_key_name).limit(1).single().execute()
                 if not key_ref_resp.data:
                     raise HTTPException(status_code=400, detail=f"API key named '{form_data.api_key_name}' not found.")
@@ -392,39 +379,37 @@ async def api_process_code(
                 api_key = decrypted_resp.data
             except Exception as e:
                 raise HTTPException(status_code=500, detail="Could not retrieve your saved API key.")
-
     else:
-        # --- ANONYMOUS USER LOGIC ---
         ip_address = req.client.host
-        
-        # 1. First, check their daily anonymous quota.
         await check_anonymous_quota(req)
-
-        # 2. Then, ensure they have provided a key to use.
+        
         if form_data.provider.lower() != 'ollama' and not api_key:
             raise HTTPException(status_code=401, detail="Please provide an API key to run an analysis.")
 
-    # --- (File processing and job creation logic is the same) ---
     project_files: Dict[str, str] = {}
     with tempfile.TemporaryDirectory() as tmpdir:
-        # ... (file reading logic)
         is_zip = len(files) == 1 and files[0].filename and files[0].filename.lower().endswith(".zip")
         if is_zip:
             zip_path = os.path.join(tmpdir, files[0].filename)
-            with open(zip_path, "wb") as f: shutil.copyfileobj(files[0].file, f)
-            with zipfile.ZipFile(zip_path, "r") as zf: zf.extractall(tmpdir)
+            with open(zip_path, "wb") as f:
+                shutil.copyfileobj(files[0].file, f)
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                zf.extractall(tmpdir)
             for root, _, fnames in os.walk(tmpdir):
                 for fname in fnames:
                     if not fname.lower().endswith(".zip") and not fname.startswith("._"):
                         fpath = os.path.join(root, fname)
                         rpath = os.path.relpath(fpath, tmpdir)
                         try:
-                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f: project_files[rpath] = f.read()
-                        except (IOError, OSError): pass
+                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                                project_files[rpath] = f.read()
+                        except (IOError, OSError):
+                            pass
         else:
             for file in files:
                 contents = await file.read()
-                if file.filename: project_files[file.filename] = contents.decode("utf-8", errors="ignore")
+                if file.filename:
+                    project_files[file.filename] = contents.decode("utf-8", errors="ignore")
 
     if not project_files:
         raise HTTPException(status_code=400, detail="No processable files found.")
@@ -457,7 +442,6 @@ async def call_llm_and_process(payload: dict) -> dict:
             error_log=payload.get("error_log"),
             token_saver=payload.get("token_saver_enabled", False),
             api_keys=payload.get("api_keys"),
-            # --- PASS THE NEW PARAMETERS THROUGH ---
             abstraction_enabled=payload.get("abstraction_enabled"),
             abstraction_level=payload.get("abstraction_level"),
             abstraction_chunking=payload.get("abstraction_chunking"),
@@ -497,7 +481,6 @@ async def process_job_background(job_id: str, payload: dict):
 
 @app.get("/api/status/{job_id}")
 async def get_job_status(req: Request, job_id: str, user: Optional[dict] = Depends(get_optional_current_user)):
-    # First, check the in-memory store for a quick response
     job = JOB_STORE.get(job_id)
     if job:
         if user and job.get("user_id") == user["id"]:
@@ -505,7 +488,6 @@ async def get_job_status(req: Request, job_id: str, user: Optional[dict] = Depen
         if not user and job.get("ip_address") == req.client.host:
             return JSONResponse(job)
 
-    # If not in memory, check the database
     try:
         resp = supabase.table("jobs").select("*").eq("job_id", job_id).single().execute()
         if resp.data:
@@ -522,4 +504,3 @@ async def get_job_status(req: Request, job_id: str, user: Optional[dict] = Depen
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "time": datetime.utcnow().isoformat()}
-
