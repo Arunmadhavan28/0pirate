@@ -393,16 +393,17 @@ async def api_process_code(
     ip_address = None
     api_key = form_data.api_key
 
+    # The logic is now unified: every job needs a key.
     if user:
+        # --- LOGGED-IN USER LOGIC ---
         user_id = user["id"]
-        user_tier = await get_user_tier(user_id)
-        await check_tier_quota(user_id, user_tier)
-        
+        # Logged-in users must use a saved key by providing its name.
         if form_data.provider.lower() not in ["auto", "ollama"] and not form_data.api_key_name:
             raise HTTPException(status_code=400, detail="Please select a saved API key.")
         
         if form_data.api_key_name:
             try:
+                # Fetches the user's saved API key
                 key_ref_resp = supabase.table("user_api_keys").select("encrypted_api_key_id").eq("user_id", user_id).eq("name", form_data.api_key_name).limit(1).single().execute()
                 if not key_ref_resp.data:
                     raise HTTPException(status_code=400, detail=f"API key named '{form_data.api_key_name}' not found.")
@@ -410,39 +411,35 @@ async def api_process_code(
                 decrypted_resp = supabase.rpc("reveal_secret", {"secret_id": secret_id}).execute()
                 api_key = decrypted_resp.data
             except Exception as e:
-                logger.error(f"Could not retrieve saved API key: {str(e)}", exc_info=True)
                 raise HTTPException(status_code=500, detail="Could not retrieve your saved API key.")
+
     else:
+        # --- ANONYMOUS USER LOGIC ---
         ip_address = req.client.host
-        await check_anonymous_quota(req)
-        
+        # For an anonymous user, a raw API key is ALWAYS required.
         if form_data.provider.lower() != 'ollama' and not api_key:
             raise HTTPException(status_code=401, detail="Please provide an API key to run an analysis.")
 
+    # --- (File processing and job creation logic is the same) ---
     project_files: Dict[str, str] = {}
     with tempfile.TemporaryDirectory() as tmpdir:
         is_zip = len(files) == 1 and files[0].filename and files[0].filename.lower().endswith(".zip")
         if is_zip:
             zip_path = os.path.join(tmpdir, files[0].filename)
-            with open(zip_path, "wb") as f:
-                shutil.copyfileobj(files[0].file, f)
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(tmpdir)
+            with open(zip_path, "wb") as f: shutil.copyfileobj(files[0].file, f)
+            with zipfile.ZipFile(zip_path, "r") as zf: zf.extractall(tmpdir)
             for root, _, fnames in os.walk(tmpdir):
                 for fname in fnames:
                     if not fname.lower().endswith(".zip") and not fname.startswith("._"):
                         fpath = os.path.join(root, fname)
                         rpath = os.path.relpath(fpath, tmpdir)
                         try:
-                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
-                                project_files[rpath] = f.read()
-                        except (IOError, OSError):
-                            pass
+                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f: project_files[rpath] = f.read()
+                        except (IOError, OSError): pass
         else:
             for file in files:
                 contents = await file.read()
-                if file.filename:
-                    project_files[file.filename] = contents.decode("utf-8", errors="ignore")
+                if file.filename: project_files[file.filename] = contents.decode("utf-8", errors="ignore")
 
     if not project_files:
         raise HTTPException(status_code=400, detail="No processable files found.")
