@@ -18,21 +18,14 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client, Client
-from supabase.lib.client_options import ClientOptions
-from starlette.middleware.base import BaseHTTPMiddleware  # Added this import
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.config import settings
-from src.secure_wrapper import process_code_submission  # Assuming this is defined elsewhere
+from src.secure_wrapper import process_code_submission
 
-# -------------------------------------------
-# Logging
-# -------------------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("server")
 
-# -------------------------------------------
-# App + Supabase client init
-# -------------------------------------------
 APP_NAME = "0pirate-backend"
 app = FastAPI(title=APP_NAME)
 
@@ -41,7 +34,7 @@ class GlobalExceptionMiddleware(BaseHTTPMiddleware):
         try:
             return await call_next(request)
         except Exception as exc:
-            logger.error(f"Global error: {traceback.format_exc()}")
+            logger.error(f"Global error: {traceback.format_exc()}", exc_info=True)
             return JSONResponse(
                 status_code=500,
                 content={"detail": "Internal server error occurred."}
@@ -73,9 +66,13 @@ supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 
 JOB_STORE: Dict[str, Dict[str, Any]] = {}
 
-# -------------------------------------------
-# Auth, Tier, and Key Management
-# -------------------------------------------
+TIER_LIMITS = {
+    "free": {"max_jobs_per_day": 2, "max_files": 5},
+    "developer": {"max_jobs_per_day": 50, "max_files": 20},
+    "professional": {"max_jobs_per_day": 200, "max_files": 50},
+    "enterprise": {"max_jobs_per_day": 500, "max_files": 100},
+}
+
 async def get_current_user(req: Request) -> dict:
     auth_header = req.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -90,7 +87,7 @@ async def get_current_user(req: Request) -> dict:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    
+
 async def get_optional_current_user(req: Request) -> Optional[dict]:
     auth_header = req.headers.get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
@@ -105,13 +102,6 @@ async def get_optional_current_user(req: Request) -> Optional[dict]:
     except Exception:
         return None
 
-TIER_LIMITS = {
-    "free": {"max_jobs_per_day": 2, "max_files": 5},
-    "developer": {"max_jobs_per_day": 50, "max_files": 20},
-    "professional": {"max_jobs_per_day": 200, "max_files": 50},
-    "enterprise": {"max_jobs_per_day": 500, "max_files": 100},
-}
-
 async def get_user_tier(user_id: str) -> str:
     try:
         resp = supabase.table("profiles").select("tier").eq("id", user_id).single().execute()
@@ -121,31 +111,37 @@ async def get_user_tier(user_id: str) -> str:
         logger.error(f"Could not fetch tier for user {user_id}: {e}")
     return "free"
 
-# Added quota check functions (were missing)
 async def check_tier_quota(user_id: str, tier: str):
     limits = TIER_LIMITS.get(tier, TIER_LIMITS["free"])
     try:
-        # Example: Count jobs today (adjust query as needed)
         today = datetime.utcnow().date().isoformat()
-        count_resp = supabase.table("jobs").select("count(*)").eq("user_id", user_id).gte("created_at", today).execute()
-        job_count = count_resp.data[0]["count"] if count_resp.data else 0
+        count_resp = supabase.table("jobs") \
+            .select("*", count="exact", head=True) \
+            .eq("user_id", user_id) \
+            .gte("created_at", f"{today}T00:00:00") \
+            .execute()
+        job_count = count_resp.count if count_resp.count is not None else 0
         if job_count >= limits["max_jobs_per_day"]:
             raise HTTPException(status_code=429, detail="Daily job limit exceeded for your tier")
     except Exception as e:
-        logger.error(f"Quota check failed: {e}")
+        logger.error(f"Quota check failed for user {user_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Quota check failed")
 
 async def check_anonymous_quota(req: Request):
     ip = req.client.host
     try:
-        # Example: Count anonymous jobs today by IP
         today = datetime.utcnow().date().isoformat()
-        count_resp = supabase.table("jobs").select("count(*)").eq("ip_address", ip).is_("user_id", None).gte("created_at", today).execute()
-        job_count = count_resp.data[0]["count"] if count_resp.data else 0
+        count_resp = supabase.table("jobs") \
+            .select("*", count="exact", head=True) \
+            .eq("ip_address", ip) \
+            .is_("user_id", None) \
+            .gte("created_at", f"{today}T00:00:00") \
+            .execute()
+        job_count = count_resp.count if count_resp.count is not None else 0
         if job_count >= TIER_LIMITS["free"]["max_jobs_per_day"]:
             raise HTTPException(status_code=429, detail="Daily anonymous job limit exceeded")
     except Exception as e:
-        logger.error(f"Anonymous quota check failed: {e}")
+        logger.error(f"Anonymous quota check failed for IP {ip}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Quota check failed")
 
 class ApiKeyRequest(BaseModel):
@@ -324,9 +320,6 @@ async def razorpay_webhook(req: Request, x_razoray_signature: Annotated[str | No
         logger.error(f"Webhook verification failed or error during processing: {e}")
         raise HTTPException(status_code=400, detail="Invalid webhook signature or processing error")
 
-# -------------------------------------------
-# PROCESSING ENDPOINT
-# -------------------------------------------
 class ProcessRequestForm:
     def __init__(
         self,
@@ -428,9 +421,6 @@ async def api_process_code(
     asyncio.create_task(process_job_background(job_id, job_payload))
     return JSONResponse({"job_id": job_id})
 
-# -------------------------------------------
-# Background Job Processor & Status Endpoint
-# -------------------------------------------
 async def call_llm_and_process(payload: dict) -> dict:
     try:
         result_dict = await asyncio.to_thread(
