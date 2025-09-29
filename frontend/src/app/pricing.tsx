@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Star, Zap, Users, Building2 } from "lucide-react";
+// located at the top of pricing.tsx
+import { Check, Star, Zap, Users, Building2, User } from "lucide-react";
 
 // Optimized cursor glow hook with performance improvements
 const useCursorGlow = (ref: React.RefObject<HTMLElement>) => {

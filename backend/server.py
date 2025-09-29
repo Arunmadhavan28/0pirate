@@ -399,6 +399,11 @@ async def api_process_code(
     if user:
         # --- LOGGED-IN USER LOGIC ---
         user_id = user["id"]
+
+        # FIXED: Get the user's tier and check their quota BEFORE proceeding.
+        user_tier = await get_user_tier(user_id)
+        await check_tier_quota(user_id, user_tier)
+
         # Logged-in users must use a saved key by providing its name.
         if form_data.provider.lower() not in ["auto", "ollama"] and not form_data.api_key_name:
             raise HTTPException(status_code=400, detail="Please select a saved API key.")
@@ -418,6 +423,10 @@ async def api_process_code(
     else:
         # --- ANONYMOUS USER LOGIC ---
         ip_address = req.client.host
+        
+        # FIXED: Check the anonymous user's quota BEFORE proceeding.
+        await check_anonymous_quota(req)
+
         # For an anonymous user, a raw API key is ALWAYS required.
         if form_data.provider.lower() != 'ollama' and not api_key:
             raise HTTPException(status_code=401, detail="Please provide an API key to run an analysis.")
@@ -459,6 +468,7 @@ async def api_process_code(
 
     asyncio.create_task(process_job_background(job_id, job_payload))
     return JSONResponse({"job_id": job_id})
+
 
 async def call_llm_and_process(payload: dict) -> dict:
     try:
