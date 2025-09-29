@@ -1234,17 +1234,19 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   }, []);
 
   const fail = useCallback((err: string) => {
-  // Check for any kind of quota error message from the backend
-  if (err?.includes?.("quota exceeded")) {
+  // FIXED: The check is now more robust to catch different "limit exceeded" messages.
+  const isQuotaError = err?.includes?.("quota exceeded") || err?.includes?.("limit exceeded");
+
+  if (isQuotaError) {
     if (!token) {
-      // If user is a GUEST, trigger the Auth screen
+      // If user is a GUEST, trigger the Auth screen.
       onGuestQuotaExceeded();
     } else {
-      // If user is LOGGED IN, trigger the Upgrade/Pricing screen
+      // If user is LOGGED IN, trigger the Upgrade/Pricing screen.
       onUserQuotaExceeded();
     }
   } else {
-    // For all other errors
+    // For all other errors, show the error in the UI.
     setResult({ notice: `Error: ${err}` });
     setView("error");
   }
@@ -1759,7 +1761,7 @@ const [accountManagerView, setAccountManagerView] = useState('account');
   };
 
   const handleGuestQuotaExceeded = () => {
-  alert("You've used your 2 free analyses for the day. Your quota resets at 5:30 AM IST. Please sign up to continue.");
+  //alert("You've used your 2 free analyses for the day. Your quota resets at 5:30 AM IST. Please sign up to continue.");
   setShowAuthPage(true);
 };
 

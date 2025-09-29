@@ -31,19 +31,21 @@ APP_NAME = "0pirate-backend"
 app = FastAPI(title=APP_NAME)
 
 # Global middleware to catch exceptions and ensure responses
+
 class GlobalExceptionMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         try:
             response = await call_next(request)
             return response
         # --- THIS IS THE FIX ---
-        # It now checks if the exception is an HTTPException and ignores it,
-        # letting FastAPI handle it correctly.
+        # It now checks if the exception is an HTTPException (like our 429 quota error)
+        # and lets FastAPI handle it correctly, instead of turning it into a 500 error.
         except HTTPException as http_exc:
             raise http_exc
         except Exception as exc:
             logger.error(f"Global error at {request.url}: {traceback.format_exc()}")
             return JSONResponse(status_code=500, content={"detail": "An internal server error occurred."})
+
 
 # CORS configuration (allows your frontend origins)
 origins = [
