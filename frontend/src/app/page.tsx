@@ -462,12 +462,14 @@ const OnboardingIdleView = () => {
 // =============================================================
 function OllamaSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void; }) {
   const [origin, setOrigin] = useState("");
+  const [isSecureContext, setIsSecureContext] = useState(false);
   const [copyStatus, setCopyStatus] = useState("Copy");
+  const [activeTab, setActiveTab] = useState("chrome");
 
   useEffect(() => {
-    // This ensures the code only runs on the client-side where window is available
     if (typeof window !== "undefined") {
       setOrigin(window.location.origin);
+      setIsSecureContext(window.location.protocol === 'https:');
     }
   }, []);
 
@@ -486,16 +488,12 @@ function OllamaSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
     <AnimatePresence>
       <motion.div 
         className="modal-backdrop backdrop-blur-sm"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
       >
         <motion.div 
-          className="modal-panel max-w-2xl mx-auto mt-20"
-          initial={{ scale: 0.95, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.95, opacity: 0 }}
+          className="modal-panel max-w-3xl mx-auto mt-20"
+          initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="p-8 space-y-6">
@@ -503,44 +501,54 @@ function OllamaSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
               <h3 className="text-2xl font-semibold text-text-primary flex items-center justify-center gap-3">
                 <Bot size={24} /> Local Ollama Setup
               </h3>
-              <p className="text-text-secondary mt-2">
-                To use your local models, you need to configure Ollama to accept requests from this web application.
+              <p className="text-text-secondary mt-2 max-w-xl mx-auto">
+                To use your local models, Ollama must be configured to accept requests from this web application.
               </p>
             </div>
             
+            {isSecureContext && (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-sm">
+                    <p><strong>Heads up!</strong> Your browser blocks secure websites (like this one) from talking to insecure local servers by default. The steps below explain how to bypass this for development.</p>
+                </div>
+            )}
+
             <div className="space-y-4">
-              <p className="text-text-primary font-medium">1. Make sure Ollama is installed and running on your machine.</p>
-              
               <div>
-                <p className="text-text-primary font-medium mb-2">2. Restart your Ollama server with the following command:</p>
+                <p className="text-text-primary font-medium mb-2">Step 1: Restart your Ollama server with this command.</p>
                 <div className="bg-background-light p-4 rounded-lg border border-border-primary flex items-center justify-between gap-4">
-                  <pre className="text-sm text-green-400 overflow-x-auto">
-                    <code>{command}</code>
-                  </pre>
+                  <pre className="text-sm text-green-400 overflow-x-auto"><code>{command}</code></pre>
                   <button onClick={handleCopy} className="btn btn-secondary text-sm px-3 py-1.5 flex-shrink-0">
                     {copyStatus === "Copy" ? <Clipboard size={14} /> : <ClipboardCheck size={14} className="text-green-400" />}
                     {copyStatus}
                   </button>
                 </div>
               </div>
-
-              <p className="text-sm text-text-secondary pt-2">
-                This command tells your local Ollama server that it's safe to receive API calls from <strong className="text-text-primary font-mono">{origin}</strong>. This is a standard security step required by Ollama.
-              </p>
+            
+              {isSecureContext && (
+                <div>
+                    <p className="text-text-primary font-medium mb-2">Step 2: Configure your browser to allow mixed content (for advanced users).</p>
+                    <div className="border border-border-primary rounded-lg">
+                        <div className="flex border-b border-border-primary">
+                            <button onClick={() => setActiveTab('chrome')} className={`px-4 py-2 text-sm ${activeTab === 'chrome' ? 'bg-background-light text-white' : 'text-text-secondary'}`}>Chrome / Edge</button>
+                            <button onClick={() => setActiveTab('other')} className={`px-4 py-2 text-sm ${activeTab === 'chrome' ? 'text-text-secondary' : 'bg-background-light text-white'}`}>Safari / Firefox</button>
+                        </div>
+                        <div className="p-4 text-sm text-gray-300">
+                            {activeTab === 'chrome' ? (
+                                <p>Navigate to <code className="font-mono bg-background-light px-1 py-0.5 rounded">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, enable the flag, and add <code className="font-mono bg-background-light px-1 py-0.5 rounded">{origin}</code> to the list. Then, restart your browser.</p>
+                            ) : (
+                                <p>For browsers like Safari and Firefox, this feature is heavily restricted. The recommended approach is to run the 0Pirate application locally for development, which will allow a direct connection.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+              )}
             </div>
             
             <div className="flex justify-between items-center pt-4">
               <a href="https://github.com/ollama/ollama/blob/main/docs/faq.md#how-can-i-expose-ollama-on-my-network" target="_blank" rel="noopener noreferrer" className="btn btn-link text-accent-primary text-sm flex items-center gap-2">
                 Ollama CORS Docs <ExternalLink size={14} />
               </a>
-              <motion.button 
-                onClick={onClose} 
-                className="btn btn-primary"
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                Got it
-              </motion.button>
+              <motion.button onClick={onClose} className="btn btn-primary" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>Got it</motion.button>
             </div>
           </div>
         </motion.div>
@@ -1228,6 +1236,106 @@ function GuestApiKeyInput({ apiKey, setApiKey, setProvider }: {
   );
 }
 
+// =============================================================
+// --- NEW COMPONENT: Ollama Setup Instructions Modal ---
+// =============================================================
+function OllamaSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void; }) {
+  const [origin, setOrigin] = useState("");
+  const [isSecureContext, setIsSecureContext] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("Copy");
+  const [activeTab, setActiveTab] = useState("chrome");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setOrigin(window.location.origin);
+      setIsSecureContext(window.location.protocol === 'https:');
+    }
+  }, []);
+
+  const command = `OLLAMA_ORIGINS=${origin} ollama serve`;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(command).then(() => {
+      setCopyStatus("Copied!");
+      setTimeout(() => setCopyStatus("Copy"), 2000);
+    });
+  };
+  
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div 
+        className="modal-backdrop backdrop-blur-sm"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+      >
+        <motion.div 
+          className="modal-panel max-w-3xl mx-auto mt-20"
+          initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-8 space-y-6">
+            <div className="text-center">
+              <h3 className="text-2xl font-semibold text-text-primary flex items-center justify-center gap-3">
+                <Bot size={24} /> Local Ollama Setup
+              </h3>
+              <p className="text-text-secondary mt-2 max-w-xl mx-auto">
+                To use your local models, Ollama must be configured to accept requests from this web application.
+              </p>
+            </div>
+            
+            {isSecureContext && (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-sm">
+                    <p><strong>Heads up!</strong> Your browser blocks secure websites (like this one) from talking to insecure local servers by default. The steps below explain how to bypass this for development.</p>
+                </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-text-primary font-medium mb-2">Step 1: Restart your Ollama server with this command.</p>
+                <div className="bg-background-light p-4 rounded-lg border border-border-primary flex items-center justify-between gap-4">
+                  <pre className="text-sm text-green-400 overflow-x-auto"><code>{command}</code></pre>
+                  <button onClick={handleCopy} className="btn btn-secondary text-sm px-3 py-1.5 flex-shrink-0">
+                    {copyStatus === "Copy" ? <Clipboard size={14} /> : <ClipboardCheck size={14} className="text-green-400" />}
+                    {copyStatus}
+                  </button>
+                </div>
+              </div>
+            
+              {isSecureContext && (
+                <div>
+                    <p className="text-text-primary font-medium mb-2">Step 2: Configure your browser to allow mixed content (for advanced users).</p>
+                    <div className="border border-border-primary rounded-lg">
+                        <div className="flex border-b border-border-primary">
+                            <button onClick={() => setActiveTab('chrome')} className={`px-4 py-2 text-sm ${activeTab === 'chrome' ? 'bg-background-light text-white' : 'text-text-secondary'}`}>Chrome / Edge</button>
+                            <button onClick={() => setActiveTab('other')} className={`px-4 py-2 text-sm ${activeTab === 'chrome' ? 'text-text-secondary' : 'bg-background-light text-white'}`}>Safari / Firefox</button>
+                        </div>
+                        <div className="p-4 text-sm text-gray-300">
+                            {activeTab === 'chrome' ? (
+                                <p>Navigate to <code className="font-mono bg-background-light px-1 py-0.5 rounded">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code>, enable the flag, and add <code className="font-mono bg-background-light px-1 py-0.5 rounded">{origin}</code> to the list. Then, restart your browser.</p>
+                            ) : (
+                                <p>For browsers like Safari and Firefox, this feature is heavily restricted. The recommended approach is to run the 0Pirate application locally for development, which will allow a direct connection.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-between items-center pt-4">
+              <a href="https://github.com/ollama/ollama/blob/main/docs/faq.md#how-can-i-expose-ollama-on-my-network" target="_blank" rel="noopener noreferrer" className="btn btn-link text-accent-primary text-sm flex items-center gap-2">
+                Ollama CORS Docs <ExternalLink size={14} />
+              </a>
+              <motion.button onClick={onClose} className="btn btn-primary" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>Got it</motion.button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
 
 function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }: {
   token: string | null;
@@ -1367,18 +1475,11 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
     setJobId(null);
     setStatus("Submitting analysis request...");
 
-    // =================================================================
-    // FIXED: This is the new logic for handling local Ollama provider
-    // =================================================================
     if (provider === 'ollama') {
       try {
         setStatus("Connecting to local LLM...");
-        
-        // Construct a simple prompt. Your secure_wrapper does more complex logic,
-        // which you could replicate here or simplify for local use.
         let prompt = `Task: ${task}\n\n`;
         if (files.length > 0) {
-            // Reading file content needs to be async
             const fileContent = await files[0].text();
             prompt += `File: ${files[0].name}\n---\n${fileContent}`;
         } else {
@@ -1390,95 +1491,48 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
 
         const ollamaResponse = await fetch('http://localhost:11434/api/generate', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: model,
-            prompt: prompt,
-            stream: false // For simplicity, we get the whole response at once
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: model, prompt: prompt, stream: false }),
         });
 
-        if (!ollamaResponse.ok) {
-          throw new Error(`Ollama server responded with status ${ollamaResponse.status}.`);
-        }
-
+        if (!ollamaResponse.ok) throw new Error(`Ollama server responded with status ${ollamaResponse.status}.`);
         const ollamaResult = await ollamaResponse.json();
-        
-        // Format the Ollama response to match what the 'success' function expects
-        const formattedResult = {
-          result: {
-            "Ollama Response.md": ollamaResult.response
-          },
-          analysis: "Analysis completed using your local Ollama instance."
-        };
+        const formattedResult = { result: { "Ollama Response.md": ollamaResult.response }, analysis: "Analysis completed using your local Ollama instance." };
         success(formattedResult);
 
       } catch (e: any) {
-        fail(`Could not connect to local Ollama server. Please check the setup instructions and ensure it's running with the correct CORS configuration. Error: ${e.message}`);
+        fail(`Connection failed. Please open the "Setup" guide for instructions on configuring your browser and Ollama server.`);
       }
-      return; // Stop execution here for the ollama provider
+      return;
     }
-    // =================================================================
-    // End of Ollama-specific logic. The rest of the function handles
-    // cloud providers as before.
-    // =================================================================
 
-    const requiresKey = !['auto'].includes(provider); // Ollama is handled above
+    const requiresKey = !['auto'].includes(provider);
     if (requiresKey) {
-        if (token && !selectedKeyName) {
-            return fail(`Please select a saved API key for '${provider}' in your account settings.`);
-        }
-        if (!token && !guestApiKey.trim()) {
-            return fail(`Please provide an API key for '${provider}' to continue.`);
-        }
+      if (token && !selectedKeyName) return fail(`Please select a saved API key for '${provider}' in your account settings.`);
+      if (!token && !guestApiKey.trim()) return fail(`Please provide an API key for '${provider}' to continue.`);
     }
     
     const fd = new FormData();
-    if (files.length > 0) {
-        files.forEach(file => fd.append("files", file, file.name));
-    } else {
-        fd.append("files", new Blob([pastedCode]), "pasted_code.py");
-    }
+    if (files.length > 0) files.forEach(file => fd.append("files", file, file.name));
+    else fd.append("files", new Blob([pastedCode]), "pasted_code.py");
     fd.append("task", task);
     if (errorLog) fd.append("error_log", errorLog);
-
     fd.append("provider", provider);
     if (model) fd.append("model", model);
-    
-    if (token && selectedKeyName) {
-      fd.append("api_key_name", selectedKeyName);
-    } else if (!token && guestApiKey) {
-      fd.append("api_key", guestApiKey);
-    }
-    
+    if (token && selectedKeyName) fd.append("api_key_name", selectedKeyName);
+    else if (!token && guestApiKey) fd.append("api_key", guestApiKey);
     fd.append("token_saver_enabled", String(tokenSaver));
     fd.append("abstraction_enabled", String(maxSecurity));
     fd.append("abstraction_level", maxSecurity ? "paranoid" : "standard");
     
     try {
       const headers: HeadersInit = {};
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const res = await fetch(`${BACKEND_URL}/api/process_code`, { 
-        method: "POST", 
-        headers: headers,
-        body: fd 
-      });
-
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(`${BACKEND_URL}/api/process_code`, { method: "POST", headers, body: fd });
       const d = await res.json();
-      if (res.ok) { 
-        setJobId(d.job_id); 
-        setStatus("Job submitted, processing..."); 
-      } else { 
-        fail(d.detail || "Submission failed."); 
-      }
-    } catch (e: any) { 
-      fail(e.message || "A network error occurred."); 
-    }
+      if (res.ok) { setJobId(d.job_id); setStatus("Job submitted, processing..."); }
+      else fail(d.detail || "Submission failed.");
+    } catch (e: any) { fail(e.message || "A network error occurred."); }
   };
 
 
