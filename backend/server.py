@@ -157,6 +157,8 @@ async def check_anonymous_quota(req: Request):
         job_count = count_resp.count if count_resp.count is not None else 0
         if job_count >= TIER_LIMITS["free"]["max_jobs_per_day"]:
             raise HTTPException(status_code=429, detail="Daily anonymous job limit exceeded")
+    except HTTPException as http_exc:
+        raise http_exc
     except Exception as e:
         logger.error(f"Anonymous quota check failed for IP {ip}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Quota check failed")
