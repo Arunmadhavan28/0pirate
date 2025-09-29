@@ -55,12 +55,13 @@ interface Plan {
 }
 
 interface PricingPageProps {
+  onClose: () => void; // <-- Add this line
   onSelectFreePlan: () => void;
   onSelectPaidPlan: (planId: string, billingCycle: 'monthly' | 'yearly') => void;
   isUpgradeMode?: boolean;
 }
 
-export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan, isUpgradeMode }: PricingPageProps) {
+export default function PricingPage({ onClose, onSelectFreePlan, onSelectPaidPlan, isUpgradeMode }: PricingPageProps) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('yearly');
   const [loading, setLoading] = useState(true);
@@ -425,6 +426,7 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan, isUpgr
           </p>
         </motion.div>
 
+
         {/* Billing Toggle */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
@@ -587,6 +589,20 @@ export default function PricingPage({ onSelectFreePlan, onSelectPaidPlan, isUpgr
             </motion.div>
           ))}
         </div>
+        {/* --- Back to App Button Added Here --- */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="mt-16 text-center"
+        >
+          <button
+            onClick={onClose}
+            className="btn btn-secondary w-auto px-10 py-4"
+          >
+            Back to App
+          </button>
+        </motion.div>
       </div>
     </div>
   );
