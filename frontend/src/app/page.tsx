@@ -1887,7 +1887,15 @@ const [accountManagerView, setAccountManagerView] = useState('account');
   //alert("You've used your 2 free analyses for the day. Your quota resets at 5:30 AM IST. Please sign up to continue.");
   setShowAuthPage(true);
 };
-
+  const getTierBadgeProps = (tier: string | null) => {
+    const tierLower = tier?.toLowerCase();
+    switch (tierLower) {
+      case 'developer': return { tone: 'info', children: 'Developer' };
+      case 'professional': return { tone: 'info', children: 'Professional' };
+      case 'enterprise': return { tone: 'success', children: 'Enterprise' };
+      default: return { tone: 'default', children: 'Free' };
+    }
+  };
 
   const handleUserQuotaExceeded = () => {
     handleNavigateToUpgrade();
@@ -1985,53 +1993,70 @@ const [accountManagerView, setAccountManagerView] = useState('account');
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       
       {!showLandingPage && (
-        <header className="main-container app-header py-6 flex justify-between items-center">
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
-            <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
-            <p className="app-tagline">Secure & Refactor Your Code with AI</p>
-          </motion.div>
-          {user ? (
-  <div className="flex items-center gap-3">
-    {/* NEW Green "Add API Key" Button */}
-    <motion.button 
-      onClick={() => {
-        setAccountManagerView('api_keys');
-        setPanelOpen(true);
-      }} 
-      className="btn bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 group"
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.6, delay: 0.3 }}
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-    >
-      <KeyRound size={16} /> Add API Key
-    </motion.button>
+    <header className="main-container app-header py-6 flex justify-between items-center">
+        {/* --- MODIFIED BRANDING SECTION --- */}
+        <div className="flex items-center gap-4">
+            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
+                <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
+                <p className="app-tagline">Secure & Refactor Your Code with AI</p>
+            </motion.div>
 
-    {/* Updated "Account" Button */}
-    <motion.button 
-      onClick={() => {
-        setAccountManagerView('account');
-        setPanelOpen(true);
-      }} 
-      className="btn btn-secondary group"
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.6, delay: 0.2 }}
-      whileHover={{ scale: 1.05 }}
-      whileTap={{ scale: 0.95 }}
-    >
-      <User size={16} className="group-hover:scale-110 transition-transform" /> Account
-    </motion.button>
-  </div>
-) : (
-  // This part for guests remains the same
-  <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-    Sign Up / Log In
-  </motion.button>
+            {/* --- BADGE MOVED AND ANIMATED HERE --- */}
+            <AnimatePresence mode="wait">
+                {user && userTier && (
+                    <motion.div
+                        key={userTier} // This key makes it re-animate when the tier changes
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.5 }}
+                    >
+                        <Badge {...getTierBadgeProps(userTier)} />
+                    </motion.div>
+                )}
+            </AnimatePresence>
+        </div>
+
+        {/* --- RIGHT-SIDE BUTTONS (NO LONGER CONTAINS THE BADGE) --- */}
+        {user ? (
+            <div className="flex items-center gap-3">
+                <motion.button 
+                    onClick={() => {
+                        setAccountManagerView('api_keys');
+                        setPanelOpen(true);
+                    }} 
+                    className="btn bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 group"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.6, delay: 0.3 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                >
+                    <KeyRound size={16} /> Add API Key
+                </motion.button>
+
+                <motion.button 
+                    onClick={() => {
+                        setAccountManagerView('account');
+                        setPanelOpen(true);
+                    }} 
+                    className="btn btn-secondary group"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.6, delay: 0.2 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                >
+                    <User size={16} className="group-hover:scale-110 transition-transform" /> Account
+                </motion.button>
+            </div>
+        ) : (
+            <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                Sign Up / Log In
+            </motion.button>
+        )}
+    </header>
 )}
-        </header>
-      )}
 
       <div className="main-container flex-grow flex flex-col">
         <AnimatePresence mode="wait">
