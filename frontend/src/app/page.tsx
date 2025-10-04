@@ -7,44 +7,34 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from
 
 import {
   User, Bot, Terminal, Clipboard, ClipboardCheck, LogOut, Github, Mail, KeyRound,
-  Trash2, X, ShieldCheck, FileText, Zap, HelpCircle, Code, Settings, Edit, ChevronLeft, Loader2, ArrowRight, MessageSquare, Linkedin, ExternalLink
+  Trash2, X, ShieldCheck, FileText, Zap, HelpCircle, Code, Settings, Edit, ChevronLeft, Loader2, MessageSquare, ExternalLink,
+  UploadCloud, ClipboardPaste
 } from "lucide-react";
-
-import LandingPage from "./landing_page";
-import PricingPage from "./pricing";
-import Script from 'next/script';
 
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import ReactMarkdown from 'react-markdown';
 
 /* --- Interactive Components --- */
-
-// This component tracks the mouse and applies a spotlight effect to the background.
 function InteractiveBackground() {
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       document.body.style.setProperty('--mouse-x', `${e.clientX}px`);
       document.body.style.setProperty('--mouse-y', `${e.clientY}px`);
     };
-
     window.addEventListener("mousemove", handleMouseMove);
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
   return null;
 }
 
-// This is the bot icon that follows the cursor with a 3D tilt effect.
 function InteractiveBotIcon() {
   const ref = useRef<HTMLDivElement>(null);
-
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
-
   const springConfig = { damping: 20, stiffness: 200, mass: 0.5 };
   const springX = useSpring(mouseX, springConfig);
   const springY = useSpring(mouseY, springConfig);
-
   const rotateX = useTransform(springY, [-0.5, 0.5], ["15deg", "-15deg"]);
   const rotateY = useTransform(springX, [-0.5, 0.5], ["-15deg", "15deg"]);
 
@@ -58,50 +48,26 @@ function InteractiveBotIcon() {
       mouseX.set((mouseX_relative / width) - 0.5);
       mouseY.set((mouseY_relative / height) - 0.5);
     };
-
     window.addEventListener("mousemove", handleMouseMove);
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, [mouseX, mouseY]);
 
   return (
-    <motion.div
-      ref={ref}
-      style={{
-        transformStyle: "preserve-3d",
-        rotateX,
-        rotateY,
-      }}
-      className="mb-6 lp-hero-icon"
-    >
-      <div style={{ transform: "translateZ(20px)" }}>
-        <Bot size={40} />
-      </div>
+    <motion.div ref={ref} style={{ transformStyle: "preserve-3d", rotateX, rotateY }} className="mb-6 lp-hero-icon">
+      <div style={{ transform: "translateZ(20px)" }}><Bot size={40} /></div>
     </motion.div>
   );
 }
 
 // --- Animation Variants ---
-const fadeInUp = {
-  initial: { opacity: 0, y: 50 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } }
-};
-
-const staggerContainer = {
-  animate: { transition: { staggerChildren: 0.1 } }
-};
-
-const scaleIn = {
-  initial: { opacity: 0, scale: 0.95 },
-  animate: { opacity: 1, scale: 1 },
-  exit: { opacity: 0, scale: 0.95 }
-};
-
-
+const fadeInUp = { initial: { opacity: 0, y: 50 }, animate: { opacity: 1, y: 0, transition: { duration: 0.8, ease: "easeOut" } } };
+const staggerContainer = { animate: { transition: { staggerChildren: 0.1 } } };
+const scaleIn = { initial: { opacity: 0, scale: 0.95 }, animate: { opacity: 1, scale: 1 }, exit: { opacity: 0, scale: 0.95 } };
 
 /* -------------------------------------------------
    Configuration
 ---------------------------------------------------*/
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "https://api.0pirate.com";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -110,13 +76,7 @@ const MODEL_OPTIONS: Record<string, string[]> = {
   auto: ["(auto-select)"],
   openai: ["gpt-4o-mini", "gpt-4o"],
   anthropic: ["claude-3-haiku-20240307", "claude-3-5-sonnet-20240620"],
-   gemini: [
-    "gemini-1.5-flash", 
-    "gemini-1.5-pro", 
-    "gemini-pro", // Standard Pro model
-    "gemini-2.5-flash", // Added 2.5 Flash
-    "gemini-2.5-pro"    // Added 2.5 Pro
-  ],
+  gemini: ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro", "gemini-2.5-flash", "gemini-2.5-pro"],
   deepseek: ["deepseek-chat"],
   mistral: ["mistral-large-latest"],
   groq: ["llama-3.1-8b-instant", "llama-3.1-70b-versatile"],
@@ -124,15 +84,11 @@ const MODEL_OPTIONS: Record<string, string[]> = {
 };
 
 /* -------------------------------------------------
-   Utilities & Types
+   Types and Hooks
 ---------------------------------------------------*/
 type JobStatus = "idle" | "loading" | "result" | "error" | "upgrade";
 type ResultShape = { result?: Record<string, string> | string; analysis?: string; notice?: string; job_id?: string; };
 
-
-/* -------------------------------------------------
-   Polling Hook
----------------------------------------------------*/
 function useJobPolling(jobId: string | null, token: string | null, onResult: (data: any) => void, onError: (err: string) => void, setStatus: (s: string) => void) {
     const tokenRef = useRef(token);
     useEffect(() => { tokenRef.current = token; }, [token]);
@@ -145,12 +101,11 @@ function useJobPolling(jobId: string | null, token: string | null, onResult: (da
             if (cancelled) return;
             setStatus(`${steps[stepIndex++ % steps.length]}`);
             try {
-                
-    const headers: HeadersInit = {};
-    if (tokenRef.current) {
-        headers['Authorization'] = `Bearer ${tokenRef.current}`;
-    }
-    const res = await fetch(`${BACKEND_URL}/api/status/${jobId}`, { headers });
+                const headers: HeadersInit = {};
+                if (tokenRef.current) {
+                    headers['Authorization'] = `Bearer ${tokenRef.current}`;
+                }
+                const res = await fetch(`${BACKEND_URL}/api/status/${jobId}`, { headers });
                 if (!res.ok) { let body; try { body = await res.json(); } catch (_) { body = null; } throw new Error(body?.detail || `Server responded with status ${res.status}`); }
                 const data = await res.json();
                 if (data.status === "completed") { onResult(data); } else if (data.status === "failed") { throw new Error(data.notice || data.result || "Job failed"); } else { setTimeout(poll, 2200); }
@@ -174,37 +129,27 @@ function useCursorGlow(ref: React.RefObject<HTMLElement>) {
 
   return { onMouseMove: handleMouseMove };
 }
+
 /* -------------------------------------------------
-   Small Components
+   Small Reusable Components
 ---------------------------------------------------*/
-const Badge = ({ children, tone = "default" }: { children: React.ReactNode; tone?: string }) => { 
+const Badge = ({ children, tone = "default" }: { children: React.ReactNode; tone?: string }) => {
     const cls = tone === "success" 
         ? "inline-flex items-center px-3 py-1 rounded-full bg-emerald-600/20 border border-emerald-600/30 text-emerald-300 text-xs font-medium" 
-        : tone === "warn" 
-        ? "inline-flex items-center px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-medium" 
         : tone === "info" 
         ? "inline-flex items-center px-3 py-1 rounded-full bg-blue-600/20 border border-blue-600/30 text-blue-300 text-xs font-medium" 
         : "inline-flex items-center px-3 py-1 rounded-full bg-gray-500/20 border border-gray-500/30 text-gray-300 text-xs font-medium"; 
     return <span className={cls}>{children}</span>; 
 };
 
-/* -------------------------------------------------
-   Enhanced Loading Spinner
----------------------------------------------------*/
 const LoadingSpinner = ({ size = 20, className = "" }: { size?: number; className?: string }) => (
-  <motion.div
-    className={`inline-block ${className}`}
-    animate={{ rotate: 360 }}
-    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-  >
+  <motion.div className={`inline-block ${className}`} animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
     <Loader2 size={size} />
   </motion.div>
 );
 
-
-
 /* -------------------------------------------------
-   Redesigned Auth Component
+   Modal and View Components
 ---------------------------------------------------*/
 const AuthComponent = ({ onAuthSuccess }: { onAuthSuccess: () => void; }) => {
   const [email, setEmail] = useState("");
@@ -223,7 +168,7 @@ const AuthComponent = ({ onAuthSuccess }: { onAuthSuccess: () => void; }) => {
       if (error) {
         setError(error.message);
       } else if (data.user || data.session) {
-        onAuthSuccess(); // Close the modal on success
+        onAuthSuccess();
       } else {
          setError("Please check your email to verify your account.");
       }
@@ -345,10 +290,6 @@ const AuthComponent = ({ onAuthSuccess }: { onAuthSuccess: () => void; }) => {
   );
 };
 
-
-/* -------------------------------------------------
-   Enhanced Claude-style Onboarding View
----------------------------------------------------*/
 const OnboardingIdleView = () => {
   const card1Ref = useRef<HTMLDivElement>(null);
   const card2Ref = useRef<HTMLDivElement>(null);
@@ -369,7 +310,6 @@ const OnboardingIdleView = () => {
       animate="animate"
       exit="exit"
     >
-      {/* The static Bot icon is now replaced with the interactive one */}
       <div className="mb-4">
         <InteractiveBotIcon />
       </div>
@@ -457,9 +397,6 @@ const OnboardingIdleView = () => {
   );
 };
 
-// =============================================================
-// --- NEW COMPONENT: Ollama Setup Instructions Modal ---
-// =============================================================
 function OllamaSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void; }) {
   const [origin, setOrigin] = useState("");
   const [isSecureContext, setIsSecureContext] = useState(false);
@@ -557,10 +494,6 @@ function OllamaSetupModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =>
   );
 }
 
-
-/* -------------------------------------------------
-   Enhanced Confirmation Modal
----------------------------------------------------*/
 function ConfirmationModal({ isOpen, onClose, onConfirm, title, children, promptText, confirmLabel = "Confirm" }: {
   isOpen: boolean;
   onClose: () => void;
@@ -646,9 +579,6 @@ function ConfirmationModal({ isOpen, onClose, onConfirm, title, children, prompt
   );
 }
 
-/* -------------------------------------------------
-   Enhanced API Keys View
----------------------------------------------------*/
 function ApiKeysView({ token, savedKeys, onKeysChange }: {
     token: string | null;
     savedKeys: { name: string; provider: string }[];
@@ -746,7 +676,6 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
 
     return (
         <div className="space-y-8">
-            {/* Form Section */}
             <motion.div 
                 className="space-y-6"
                 variants={fadeInUp}
@@ -846,7 +775,6 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
                 </AnimatePresence>
             </motion.div>
 
-            {/* Saved Keys Section */}
             <motion.div 
                 className="space-y-6"
                 variants={fadeInUp}
@@ -928,35 +856,13 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
     );
 }
 
-/* -------------------------------------------------
-   Enhanced Account Manager
----------------------------------------------------*/
-function AccountManager({ 
-  token, 
-  email, 
-  savedKeys, 
-  onKeysChange, 
-  onClose, 
-  userTier, 
-  onUpgrade, 
-  activeView, 
-  setActiveView 
-}: {
-  token: string | null;
-  email: string | undefined;
-  savedKeys: { name: string; provider: string }[];
-  onKeysChange: () => void;
-  onClose: () => void;
-  userTier: string | null;
-  onUpgrade: () => void;
-  activeView: string;
-  setActiveView: (view: string) => void;
+function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTier, onUpgrade, activeView, setActiveView }: {
+  token: string | null; email: string | undefined; savedKeys: { name: string; provider: string }[]; onKeysChange: () => void;
+  onClose: () => void; userTier: string | null; onUpgrade: () => void; activeView: string; setActiveView: (view: string) => void;
 }) {
-  
   const getTierBadgeProps = (tier: string | null) => {
     const tierLower = tier?.toLowerCase();
     switch (tierLower) {
-      // FIX: Changed 'pro' to 'developer' to match your plans
       case 'developer': return { tone: 'info', children: 'Developer Plan' };
       case 'professional': return { tone: 'info', children: 'Professional Plan' };
       case 'enterprise': return { tone: 'success', children: 'Enterprise' };
@@ -964,30 +870,20 @@ function AccountManager({
     }
   };
 
-  const navItems = [
-    { id: 'account', label: 'Account', icon: User },
-    { id: 'api_keys', label: 'API Keys', icon: KeyRound }
-  ];
+  const navItems = [{ id: 'account', label: 'Account', icon: User }, { id: 'api_keys', label: 'API Keys', icon: KeyRound }];
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    onClose();
+  };
 
   return (
-    <motion.div 
-      className="modal-panel"
-      variants={scaleIn}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-    >
+    <motion.div className="modal-panel" variants={scaleIn} initial="initial" animate="animate" exit="exit">
         <div className="settings-header">
-            <motion.button 
-                onClick={onClose} 
-                className="btn btn-secondary"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-            >
+            <motion.button onClick={onClose} className="btn btn-secondary" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 <ChevronLeft size={16} /> Back to Dashboard
             </motion.button>
         </div>
-        
         <div className="settings-modal-layout">
             <nav className="settings-sidebar">
                 {navItems.map((item, index) => (
@@ -1006,42 +902,21 @@ function AccountManager({
                     </motion.button>
                 ))}
             </nav>
-            
             <main className="settings-content">
                 <AnimatePresence mode="wait">
                     {activeView === 'account' && (
-                        <motion.div
-                            key="account"
-                            variants={fadeInUp}
-                            initial="initial"
-                            animate="animate"
-                            exit="exit"
-                            className="space-y-8"
-                        >
+                        <motion.div key="account" variants={fadeInUp} initial="initial" animate="animate" exit="exit" className="space-y-8">
                             <motion.div className="settings-section">
-                                <h3 className="flex items-center gap-3">
-                                    <User size={24} className="text-accent-primary" />
-                                    Account Information
-                                </h3>
-                                <div className="settings-row bg-background-light/30 p-4 rounded-xl border border-border-primary">
+                                <h3 className="flex items-center gap-3"><User size={24} className="text-accent-primary" /> Account Information</h3>
+                                <div className="settings-row">
                                     <div className="settings-row-info">
                                         <label>Email Address</label>
-                                        <p className="text-text-primary font-mono">{email}</p>
+                                        <p className="font-mono">{email}</p>
                                     </div>
-                                    <motion.button 
-                                        className="btn btn-secondary text-sm"
-                                        whileHover={{ scale: 1.05 }}
-                                    >
-                                        Change Email
-                                    </motion.button>
                                 </div>
                             </motion.div>
-                            
                             <motion.div className="settings-section">
-                                <h3 className="flex items-center gap-3">
-                                    <Zap size={24} className="text-accent-primary" />
-                                    Subscription
-                                </h3>
+                                <h3 className="flex items-center gap-3"><Zap size={24} className="text-accent-primary" /> Subscription</h3>
                                 <div className="settings-row bg-background-light/30 p-4 rounded-xl border border-border-primary">
                                     <div className="settings-row-info">
                                         <label>Current Plan</label>
@@ -1049,53 +924,26 @@ function AccountManager({
                                             <Badge {...getTierBadgeProps(userTier)}/>
                                         </div>
                                     </div>
-                                    {/* FIXED: This button now correctly triggers the upgrade flow */}
-                                    <motion.button 
-                                        onClick={onUpgrade} 
-                                        className="btn btn-primary"
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
+                                    <motion.button onClick={onUpgrade} className="btn btn-primary" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                                         Upgrade Plan
                                     </motion.button>
                                 </div>
                             </motion.div>
-                            
                             <motion.div className="settings-section">
-                                <h3 className="flex items-center gap-3">
-                                    <LogOut size={24} className="text-accent-primary" />
-                                    Account Actions
-                                </h3>
-                                <div className="settings-row bg-background-light/30 p-4 rounded-xl border border-border-primary">
+                                <h3 className="flex items-center gap-3"><Settings size={24} className="text-accent-primary" /> Account Actions</h3>
+                                <div className="settings-row">
                                     <div className="settings-row-info">
                                         <label>Sign Out</label>
-                                        <p className="text-text-secondary">End your current session securely</p>
+                                        <p>Sign out of your account</p>
                                     </div>
-                                    <motion.button 
-                                        onClick={() => supabase.auth.signOut()} 
-                                        className="btn btn-secondary"
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <LogOut size={16} />
-                                        Sign Out
+                                    <motion.button onClick={handleSignOut} className="btn btn-secondary" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                        <LogOut size={16} /> Sign Out
                                     </motion.button>
                                 </div>
                             </motion.div>
                         </motion.div>
                     )}
-                    
-                    {activeView === 'api_keys' && (
-                        <motion.div
-                            key="api_keys"
-                            variants={fadeInUp}
-                            initial="initial"
-                            animate="animate"
-                            exit="exit"
-                        >
-                            <ApiKeysView token={token} savedKeys={savedKeys} onKeysChange={onKeysChange} />
-                        </motion.div>
-                    )}
+                    {activeView === 'api_keys' && (<ApiKeysView token={token} savedKeys={savedKeys} onKeysChange={onKeysChange} />)}
                 </AnimatePresence>
             </main>
         </div>
@@ -1103,93 +951,10 @@ function AccountManager({
   );
 }
 
-/* -------------------------------------------------
-   FINAL PROFESSIONAL TOGGLE SWITCH COMPONENT
----------------------------------------------------*/
-function ToggleSwitch({
-  label,
-  description,
-  activeInfo,
-  accentColor,
-  checked,
-  onChange,
-  icon: Icon
-}: {
-  label: string;
-  description: string;
-  activeInfo: string;
-  accentColor: 'green' | 'blue';
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  icon?: React.ElementType;
-}) {
-  const activeColor = accentColor === 'green' ? '#22C55E' : 'var(--accent-primary)';
-
-  return (
-    <div
-      className="toggle-card-enhanced"
-      data-active={checked}
-      data-accent={accentColor}
-      style={{ borderColor: checked ? activeColor : 'var(--border-primary)' }} // Dynamically set border color
-    >
-      <div className="flex justify-between items-start">
-        <div className="toggle-switch-info flex-grow">
-          {/* FIXED: The title color now correctly turns green when active */}
-          <h5 className="font-semibold" style={{ color: checked ? activeColor : 'var(--text-primary)' }}>
-            {label}
-          </h5>
-          <p className="text-sm text-text-secondary">{description}</p>
-        </div>
-        <div className="switch relative ml-4">
-          <input
-            type="checkbox"
-            checked={checked}
-            onChange={(e) => onChange(e.target.checked)}
-            className="sr-only"
-          />
-          <motion.div
-            className="slider"
-            onClick={() => onChange(!checked)}
-            // FIXED: The slider's background color now correctly turns green when active
-            animate={{ backgroundColor: checked ? activeColor : 'var(--background-light)' }}
-          >
-            <motion.span
-              className="slider-thumb"
-              animate={{ x: checked ? 18 : 0 }}
-              transition={{ type: "spring", stiffness: 500, damping: 30 }}
-            />
-          </motion.div>
-        </div>
-      </div>
-      <AnimatePresence>
-        {checked && (
-          <motion.div
-            initial={{ opacity: 0, height: 0, marginTop: 0 }}
-            animate={{ opacity: 1, height: 'auto', marginTop: '1rem' }}
-            exit={{ opacity: 0, height: 0, marginTop: 0 }}
-          >
-            {/* FIXED: The "active info" text now correctly turns green */}
-            <p className="toggle-active-info" style={{ color: activeColor }}>
-              {Icon && <Icon size={16} />} {activeInfo}
-            </p>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* -------------------------------------------------
-   Enhanced Main Application Component
----------------------------------------------------*/
-
-// --- ADD this entire new component above MainApp ---
-
-// Helper function to detect provider from API key format
 const detectApiKeyProvider = (key: string): string => {
-  if (key.startsWith("sk-proj-")) return "openai"; // OpenAI new format
-  if (key.startsWith("sk-")) return "anthropic"; // Anthropic (or older OpenAI)
-  if (key.length > 35 && key.length < 45 && !key.includes("-")) return "gemini"; // Heuristic for Gemini
+  if (key.startsWith("sk-proj-")) return "openai";
+  if (key.startsWith("sk-")) return "anthropic";
+  if (key.length > 35 && key.length < 45 && !key.includes("-")) return "gemini";
   return "unknown";
 };
 
@@ -1204,7 +969,7 @@ function GuestApiKeyInput({ apiKey, setApiKey, setProvider }: {
     const provider = detectApiKeyProvider(apiKey);
     setDetectedProvider(provider);
     if (provider !== "unknown") {
-      setProvider(provider); // Auto-select the provider in the main dropdown
+      setProvider(provider);
     }
   }, [apiKey, setProvider]);
 
@@ -1236,6 +1001,76 @@ function GuestApiKeyInput({ apiKey, setApiKey, setProvider }: {
   );
 }
 
+function ToggleSwitch({
+  label,
+  description,
+  activeInfo,
+  accentColor,
+  checked,
+  onChange,
+  icon: Icon
+}: {
+  label: string;
+  description: string;
+  activeInfo: string;
+  accentColor: 'green' | 'blue';
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  icon?: React.ElementType;
+}) {
+  const activeColor = accentColor === 'green' ? '#22C55E' : 'var(--accent-primary)';
+
+  return (
+    <div
+      className="toggle-card-enhanced"
+      data-active={checked}
+      data-accent={accentColor}
+      style={{ borderColor: checked ? activeColor : 'var(--border-primary)' }}
+    >
+      <div className="flex justify-between items-start">
+        <div className="toggle-switch-info flex-grow">
+          <h5 className="font-semibold" style={{ color: checked ? activeColor : 'var(--text-primary)' }}>
+            {label}
+          </h5>
+          <p className="text-sm text-text-secondary">{description}</p>
+        </div>
+        <div className="switch relative ml-4">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(e) => onChange(e.target.checked)}
+            className="sr-only"
+          />
+          <motion.div
+            className="slider"
+            onClick={() => onChange(!checked)}
+            animate={{ backgroundColor: checked ? activeColor : 'var(--background-light)' }}
+          >
+            <motion.span
+              className="slider-thumb"
+              animate={{ x: checked ? 18 : 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 30 }}
+            />
+          </motion.div>
+        </div>
+      </div>
+      <AnimatePresence>
+        {checked && (
+          <motion.div
+            initial={{ opacity: 0, height: 0, marginTop: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginTop: '1rem' }}
+            exit={{ opacity: 0, height: 0, marginTop: 0 }}
+          >
+            <p className="toggle-active-info" style={{ color: activeColor }}>
+              {Icon && <Icon size={16} />} {activeInfo}
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }: {
   token: string | null;
   savedKeys: { name: string; provider: string }[];
@@ -1258,54 +1093,49 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   const [view, setView] = useState<ViewState>("idle");
   const [selectedKeyName, setSelectedKeyName] = useState("");
   const [guestApiKey, setGuestApiKey] = useState("");
-
   const [inputMode, setInputMode] = useState<'paste' | 'upload'>('paste');
   const [files, setFiles] = useState<File[]>([]);
-
-  // --- NEW STATE for the Ollama instructions modal ---
   const [showOllamaHelp, setShowOllamaHelp] = useState(false);
 
-
   const getLanguageFromFileName = (filename: string | null): string => {
-  if (!filename) return 'plaintext';
-  
-  const extension = filename.split('.').pop()?.toLowerCase();
+    if (!filename) return 'plaintext';
+    
+    const extension = filename.split('.').pop()?.toLowerCase();
 
-  switch (extension) {
-    case 'js':
-    case 'jsx':
-      return 'javascript';
-    case 'ts':
-    case 'tsx':
-      return 'typescript';
-    case 'py':
-      return 'python';
-    case 'css':
-      return 'css';
-    case 'html':
-      return 'html';
-    case 'json':
-      return 'json';
-    case 'md':
-      return 'markdown';
-    case 'sh':
-    case 'bash':
-      return 'bash';
-    case 'java':
-      return 'java';
-    case 'cpp':
-      return 'cpp';
-    case 'c':
-      return 'c';
-    case 'go':
-      return 'go';
-    case 'rb':
-        return 'ruby';
-    default:
-      return 'plaintext';
-  }
-};
-
+    switch (extension) {
+      case 'js':
+      case 'jsx':
+        return 'javascript';
+      case 'ts':
+      case 'tsx':
+        return 'typescript';
+      case 'py':
+        return 'python';
+      case 'css':
+        return 'css';
+      case 'html':
+        return 'html';
+      case 'json':
+        return 'json';
+      case 'md':
+        return 'markdown';
+      case 'sh':
+      case 'bash':
+        return 'bash';
+      case 'java':
+        return 'java';
+      case 'cpp':
+        return 'cpp';
+      case 'c':
+        return 'c';
+      case 'go':
+        return 'go';
+      case 'rb':
+          return 'ruby';
+      default:
+        return 'plaintext';
+    }
+  };
 
   const language = getLanguageFromFileName(activeFile);
 
@@ -1338,24 +1168,20 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   }, []);
 
   const fail = useCallback((err: string) => {
-  // FIXED: The check is now more robust to catch different "limit exceeded" messages.
-  const isQuotaError = err?.includes?.("quota exceeded") || err?.includes?.("limit exceeded");
+    const isQuotaError = err?.includes?.("quota exceeded") || err?.includes?.("limit exceeded");
 
-  if (isQuotaError) {
-    if (!token) {
-      // If user is a GUEST, trigger the Auth screen.
-      onGuestQuotaExceeded();
+    if (isQuotaError) {
+      if (!token) {
+        onGuestQuotaExceeded();
+      } else {
+        onUserQuotaExceeded();
+      }
     } else {
-      // If user is LOGGED IN, trigger the Upgrade/Pricing screen.
-      onUserQuotaExceeded();
+      setResult({ notice: `Error: ${err}` });
+      setView("error");
     }
-  } else {
-    // For all other errors, show the error in the UI.
-    setResult({ notice: `Error: ${err}` });
-    setView("error");
-  }
-  setStatus("Analysis failed");
-}, [token, onGuestQuotaExceeded, onUserQuotaExceeded]);
+    setStatus("Analysis failed");
+  }, [token, onGuestQuotaExceeded, onUserQuotaExceeded]);
   
   useJobPolling(jobId, token, success, fail, setStatus);
 
@@ -1434,7 +1260,6 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
     } catch (e: any) { fail(e.message || "A network error occurred."); }
   };
 
-
   const copy = (textToCopy?: string) => {
     let text = textToCopy || "";
     if (!text && result?.result) {
@@ -1447,7 +1272,6 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
       setTimeout(() => setCopyOK(""), 2000);
     });
   };
-
 
   const resetAll = () => {
     setPastedCode("");
@@ -1477,10 +1301,7 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
     <>
     <OllamaSetupModal isOpen={showOllamaHelp} onClose={() => setShowOllamaHelp(false)} />
     <main className="content-grid">
-      {/* FIXED: The left pane is now a flex column to make buttons sticky */}
       <div className="left-pane flex flex-col gap-6">
-        
-        {/* This new wrapper contains all the scrollable content */}
         <div className="flex-grow space-y-6 overflow-y-auto pr-2">
           <motion.div 
             className="space-y-6"
@@ -1488,7 +1309,6 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
             initial="initial"
             animate="animate"
           >
-            {/* Code Input Section */}
             <motion.div variants={fadeInUp}>
               <div className="flex gap-2 mb-4">
                   <motion.button 
@@ -1558,96 +1378,91 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
               </div>
             </motion.div>
 
-            {/* Task Selection */}
             <motion.div className="card space-y-6" variants={fadeInUp}>
-  <div className="space-y-3">
-    <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
-      <Settings size={16} />
-      Task Selection
-    </label>
-    <select 
-      className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-      value={task} 
-      onChange={(e) => setTask(e.target.value)}
-    >
-      {taskOptions.map((option) => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  </div>
-  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div className="space-y-2">
-      <label className="text-sm font-medium text-text-secondary">Provider</label>
-      <select 
-        className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-        value={provider} 
-        onChange={(e) => setProvider(e.target.value)}
-      >
-        {Object.keys(MODEL_OPTIONS).map((p) => (
-          <option key={p} value={p} className="capitalize">{p}</option>
-        ))}
-      </select>
-    </div>
-    <div className="space-y-2">
-      {/* --- NEW: Wrapper to hold the label and the new button --- */}
-      <div className="flex justify-between items-center">
-        <label className="text-sm font-medium text-text-secondary">Model</label>
-        {provider === 'ollama' && (
-          <button 
-            onClick={() => setShowOllamaHelp(true)}
-            className="btn btn-link text-xs text-accent-primary flex items-center gap-1"
-          >
-            <HelpCircle size={14} />
-            Setup
-          </button>
-        )}
-      </div>
-      <select 
-        className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-        value={model} 
-        onChange={(e) => setModel(e.target.value)} 
-        disabled={(MODEL_OPTIONS[provider] || []).length <= 1}
-      >
-        {(MODEL_OPTIONS[provider] || []).map((m) => (
-          <option key={m} value={m}>{m}</option>
-        ))}
-      </select>
-    </div>
-  </div>
+              <div className="space-y-3">
+                <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
+                  <Settings size={16} />
+                  Task Selection
+                </label>
+                <select 
+                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                  value={task} 
+                  onChange={(e) => setTask(e.target.value)}
+                >
+                  {taskOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text-secondary">Provider</label>
+                  <select 
+                    className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                    value={provider} 
+                    onChange={(e) => setProvider(e.target.value)}
+                  >
+                    {Object.keys(MODEL_OPTIONS).map((p) => (
+                      <option key={p} value={p} className="capitalize">{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-sm font-medium text-text-secondary">Model</label>
+                    {provider === 'ollama' && (
+                      <button 
+                        onClick={() => setShowOllamaHelp(true)}
+                        className="btn btn-link text-xs text-accent-primary flex items-center gap-1"
+                      >
+                        <HelpCircle size={14} />
+                        Setup
+                      </button>
+                    )}
+                  </div>
+                  <select 
+                    className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                    value={model} 
+                    onChange={(e) => setModel(e.target.value)} 
+                    disabled={(MODEL_OPTIONS[provider] || []).length <= 1}
+                  >
+                    {(MODEL_OPTIONS[provider] || []).map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-  {/* This is the corrected API Key section */}
-  {provider !== 'auto' && provider !== 'ollama' && (
-    <div className="space-y-2">
-      <label className="text-sm font-medium text-text-secondary">API Key</label>
-      {token ? (
-        <select 
-          className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-          value={selectedKeyName} 
-          onChange={(e) => setSelectedKeyName(e.target.value)} 
-          disabled={savedKeys.filter(k => k.provider === provider).length === 0}
-        >
-          {savedKeys.filter(k => k.provider === provider).length === 0 ? 
-            (<option value="">Go to Account to add a key</option>) : 
-            (savedKeys.filter(key => key.provider === provider).map((key) => (
-              <option key={key.name} value={key.name}>{key.name}</option>
-            )))
-          }
-        </select>
-      ) : (
-        <GuestApiKeyInput 
-          apiKey={guestApiKey} 
-          setApiKey={setGuestApiKey} 
-          setProvider={setProvider} 
-        />
-      )}
-    </div>
-  )}
-
+              {provider !== 'auto' && provider !== 'ollama' && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-text-secondary">API Key</label>
+                  {token ? (
+                    <select 
+                      className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
+                      value={selectedKeyName} 
+                      onChange={(e) => setSelectedKeyName(e.target.value)} 
+                      disabled={savedKeys.filter(k => k.provider === provider).length === 0}
+                    >
+                      {savedKeys.filter(k => k.provider === provider).length === 0 ? 
+                        (<option value="">Go to Account to add a key</option>) : 
+                        (savedKeys.filter(key => key.provider === provider).map((key) => (
+                          <option key={key.name} value={key.name}>{key.name}</option>
+                        )))
+                      }
+                    </select>
+                  ) : (
+                    <GuestApiKeyInput 
+                      apiKey={guestApiKey} 
+                      setApiKey={setGuestApiKey} 
+                      setProvider={setProvider} 
+                    />
+                  )}
+                </div>
+              )}
             </motion.div>
 
-            {/* Settings Toggles */}
             <motion.div className="card space-y-4" variants={fadeInUp}>
                <h4 className="flex items-center gap-3 font-semibold text-text-primary">
                   <ShieldCheck size={18}/> Privacy & Security
@@ -1674,7 +1489,6 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
           </motion.div>
         </div>
         
-        {/* The action buttons are now outside the scrolling container, making them 'sticky' */}
         <motion.div 
           className="grid grid-cols-2 gap-4 flex-shrink-0"
           variants={fadeInUp}
@@ -1717,28 +1531,27 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
               {view === 'idle' && <OnboardingIdleView />}
               
               {view === 'loading' && (
-    <motion.div 
-      key="loading" 
-      className="flex flex-col items-center justify-center h-full text-center space-y-6"
-      variants={fadeInUp}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-    >
-       {/* The rotating motion.div wrapper has been removed */}
-       <Bot size={48} className="text-accent-primary" />
-       
-       <div className="space-y-2">
-         <h3 className="text-lg font-semibold">Processing Your Code</h3>
-         <motion.p 
-           className="text-text-secondary"
-           key={status}
-           initial={{ opacity: 0, y: 5 }}
-           animate={{ opacity: 1, y: 0 }}
-         >
-           {status}
-         </motion.p>
-       </div>
+                <motion.div 
+                  key="loading" 
+                  className="flex flex-col items-center justify-center h-full text-center space-y-6"
+                  variants={fadeInUp}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                >
+                   <Bot size={48} className="text-accent-primary" />
+                   
+                   <div className="space-y-2">
+                     <h3 className="text-lg font-semibold">Processing Your Code</h3>
+                     <motion.p 
+                       className="text-text-secondary"
+                       key={status}
+                       initial={{ opacity: 0, y: 5 }}
+                       animate={{ opacity: 1, y: 0 }}
+                     >
+                       {status}
+                     </motion.p>
+                   </div>
                    
                    <div className="w-full max-w-xs">
                      <div className="bg-background-light h-2 rounded-full overflow-hidden">
@@ -1772,13 +1585,13 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
                           <Bot size={20} className="text-accent-primary" /> 
                           AI Analysis
                         </h3>
-                       <div className="bg-background-light/50 p-4 rounded-lg border border-border-primary max-h-48 overflow-y-auto">
-  <ReactMarkdown 
-    className="prose prose-invert prose-sm max-w-none"
-  >
-    {result.analysis}
-  </ReactMarkdown>
-</div>
+                        <div className="bg-background-light/50 p-4 rounded-lg border border-border-primary max-h-48 overflow-y-auto">
+                          <ReactMarkdown 
+                            className="prose prose-invert prose-sm max-w-none"
+                          >
+                            {result.analysis}
+                          </ReactMarkdown>
+                        </div>
                       </motion.div>
                     )}
                     
@@ -1822,27 +1635,25 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
                         </div>
                       )}
                       <div className="code-output-wrapper flex-grow rounded-lg bg-code-editor border border-border-primary p-4 overflow-auto">
-  <SyntaxHighlighter 
-    language={language}
-    style={atomOneDark} 
-    wrapLines={true} 
-    wrapLongLines={true}
-    customStyle={{ 
-      background: 'transparent', 
-      padding: 0, 
-      margin: 0, 
-      fontSize: '14px',
-      // --- ADD THESE TWO LINES ---
-      whiteSpace: 'pre-wrap', 
-      wordBreak: 'break-all'  
-    }}
-    // Apply the styles directly to the <pre> tag
-    useInlineStyles={true}
-    PreTag="div" 
-  >
-    {activeFileContent || result.notice || "No code returned."}
-  </SyntaxHighlighter>
-</div>
+                        <SyntaxHighlighter 
+                          language={language}
+                          style={atomOneDark} 
+                          wrapLines={true} 
+                          wrapLongLines={true}
+                          customStyle={{ 
+                            background: 'transparent', 
+                            padding: 0, 
+                            margin: 0, 
+                            fontSize: '14px',
+                            whiteSpace: 'pre-wrap', 
+                            wordBreak: 'break-all'  
+                          }}
+                          useInlineStyles={true}
+                          PreTag="div" 
+                        >
+                          {activeFileContent || result.notice || "No code returned."}
+                        </SyntaxHighlighter>
+                      </div>
                     </div>
                 </motion.div>
               )}
@@ -1853,95 +1664,58 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
     </>
   );
 }
-/*-------------------------------------------------
-   Top-level Home wrapper
----------------------------------------------------*/
+
 export default function Home() {
   const [user, setUser] = useState<any>(null);
   const [token, setToken] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
   const [userTier, setUserTier] = useState<string | null>(null);
-
-  // --- Add this new state variable ---
-const [accountManagerView, setAccountManagerView] = useState('account');
-
-  // --- CORRECT STATE MANAGEMENT for the new flow ---
-  const [showLandingPage, setShowLandingPage] = useState(true);
+  const [accountManagerView, setAccountManagerView] = useState('account');
+  const [showLandingPage, setShowLandingPage] = useState(false);
   const [showPricingPage, setShowPricingPage] = useState(false);
   const [showAuthPage, setShowAuthPage] = useState(false);
   const [isUpgradeMode, setIsUpgradeMode] = useState(false);
 
-  // --- CORRECT HANDLERS for the new flow ---
-  const handleEnterApp = () => {
-    setShowLandingPage(false);
-  };
+  const handleEnterApp = () => setShowLandingPage(false);
+  const handleNavigateToUpgrade = () => { setIsUpgradeMode(true); setPanelOpen(false); setShowPricingPage(true); };
+  const handleGuestQuotaExceeded = () => setShowAuthPage(true);
+  const handleUserQuotaExceeded = () => handleNavigateToUpgrade();
 
-  const handleNavigateToUpgrade = () => {
-    setIsUpgradeMode(true);
-    setPanelOpen(false);
-    setShowPricingPage(true);
-  };
-
-  const handleGuestQuotaExceeded = () => {
-  //alert("You've used your 2 free analyses for the day. Your quota resets at 5:30 AM IST. Please sign up to continue.");
-  setShowAuthPage(true);
-};
-  const getTierBadgeProps = (tier: string | null) => {
+  const getTierBadgeText = (tier: string | null): string => {
     const tierLower = tier?.toLowerCase();
     switch (tierLower) {
-      case 'developer': return { tone: 'info', children: 'Developer' };
-      case 'professional': return { tone: 'info', children: 'Professional' };
-      case 'enterprise': return { tone: 'success', children: 'Enterprise' };
-      default: return { tone: 'default', children: 'Free' };
+      case 'developer': return 'Developer';
+      case 'professional': return 'Professional';
+      case 'enterprise': return 'Enterprise';
+      default: return 'Free';
     }
   };
 
-  const handleUserQuotaExceeded = () => {
-    handleNavigateToUpgrade();
-  };
-
-  const handleSelectPaidPlan = async (planId: string, billingCycle: 'monthly' | 'yearly') => {
-    if (!token || !user) {
-      setShowPricingPage(false);
-      setShowAuthPage(true);
-      alert("Please sign up or log in to choose a plan.");
-      return;
-    }
-
-    try {
-      const orderResponse = await fetch(`${BACKEND_URL}/api/create-order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ plan_id: planId, billing_cycle: billingCycle })
-      });
-      if (!orderResponse.ok) {
-        throw new Error("Failed to create payment order.");
-      }
-      const orderDetails = await orderResponse.json();
-      const options = {
-        key: orderDetails.razorpay_key_id,
-        amount: orderDetails.amount,
-        currency: orderDetails.currency,
-        name: "0Pirate",
-        description: `Payment for ${planId} plan (${billingCycle})`,
-        order_id: orderDetails.order_id,
-        handler: function (response: any) {
-          alert("Payment successful! Your plan has been upgraded.");
-          setShowPricingPage(false);
-          if (user) loadUserProfile(user.id);
-        },
-        prefill: { email: user.email },
-        theme: { color: "#3B82F6" }
-      };
-      const rzp = new (window as any).Razorpay(options);
-      rzp.open();
-    } catch (err) {
-      console.error("Payment flow failed:", err);
-      alert("An error occurred during the payment process.");
+  const getBadgeClassName = (tier: string | null): string => {
+    const tierLower = tier?.toLowerCase();
+    switch (tierLower) {
+      case 'developer': return 'bg-orange-900/50 border-orange-500/50';
+      case 'professional': return 'bg-blue-900/50 border-blue-500/50';
+      case 'enterprise': return 'bg-emerald-900/50 border-emerald-500/50';
+      default: return 'bg-gray-800/50 border-gray-600/50';
     }
   };
-  
+
+  const getBadgeFireGradient = (tier: string | null): string => {
+    const tierLower = tier?.toLowerCase();
+    switch (tierLower) {
+      case 'developer':
+        return 'conic-gradient(from 90deg at 50% 50%, #FF7700 0%, #FFD700 50%, #FF7700 100%)';
+      case 'professional':
+        return 'conic-gradient(from 90deg at 50% 50%, #00C6FF 0%, #0072FF 50%, #00C6FF 100%)';
+      case 'enterprise':
+        return 'conic-gradient(from 90deg at 50% 50%, #69FF97 0%, #00E599 50%, #69FF97 100%)';
+      default:
+        return 'conic-gradient(from 90deg at 50% 50%, #FFFFFF 0%, #999999 50%, #FFFFFF 100%)';
+    }
+  };
+
   const loadKeys = useCallback(async () => {
     if (!token) { setSavedKeys([]); return; }
     try {
@@ -1961,10 +1735,7 @@ const [accountManagerView, setAccountManagerView] = useState('account');
     } catch (e) { console.error("Failed to load user profile:", e); setUserTier("free"); }
   }, []);
 
-  useEffect(() => {
-    if (token) { loadKeys(); }
-  }, [token, loadKeys]);
-
+  useEffect(() => { if (token) { loadKeys(); } }, [token, loadKeys]);
   useEffect(() => {
     const handleAuthChange = async (session: any) => {
       setUser(session?.user ?? null);
@@ -1990,91 +1761,72 @@ const [accountManagerView, setAccountManagerView] = useState('account');
           pointer-events: none; z-index: -1;
         }
       `}</style>
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       
       {!showLandingPage && (
-    <header className="main-container app-header py-6 flex justify-between items-center">
-        {/* --- MODIFIED BRANDING SECTION --- */}
-        <div className="flex items-center gap-4">
+        <header className="main-container app-header py-6 flex justify-between items-center">
+          <div className="flex items-center gap-4">
             <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
-                <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
-                <p className="app-tagline">Secure & Refactor Your Code with AI</p>
+              <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
+              <p className="app-tagline">Secure & Refactor Your Code with AI</p>
             </motion.div>
 
-            {/* --- BADGE MOVED AND ANIMATED HERE --- */}
-            <AnimatePresence mode="wait">
-                {user && userTier && (
-                    <motion.div
-                        key={userTier} // This key makes it re-animate when the tier changes
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.5 }}
-                    >
-                        <Badge {...getTierBadgeProps(userTier)} />
-                    </motion.div>
-                )}
+            <AnimatePresence>
+              {user && userTier && (
+                <motion.div
+                  key={userTier}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.5 }}
+                  className={`relative rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-lg ${getBadgeClassName(userTier)}`}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <span className="relative z-10">{getTierBadgeText(userTier)}</span>
+                  <motion.div 
+                    className="absolute inset-[-150%] z-0"
+                    style={{ background: getBadgeFireGradient(userTier) }}
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                  />
+                </motion.div>
+              )}
             </AnimatePresence>
-        </div>
+          </div>
 
-        {/* --- RIGHT-SIDE BUTTONS (NO LONGER CONTAINS THE BADGE) --- */}
-        {user ? (
+          {user ? (
             <div className="flex items-center gap-3">
                 <motion.button 
-                    onClick={() => {
-                        setAccountManagerView('api_keys');
-                        setPanelOpen(true);
-                    }} 
+                    onClick={() => { setAccountManagerView('api_keys'); setPanelOpen(true); }} 
                     className="btn bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 group"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.6, delay: 0.3 }}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
+                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 >
                     <KeyRound size={16} /> Add API Key
                 </motion.button>
-
                 <motion.button 
-                    onClick={() => {
-                        setAccountManagerView('account');
-                        setPanelOpen(true);
-                    }} 
+                    onClick={() => { setAccountManagerView('account'); setPanelOpen(true); }} 
                     className="btn btn-secondary group"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.6, delay: 0.2 }}
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
+                    initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
+                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                 >
                     <User size={16} className="group-hover:scale-110 transition-transform" /> Account
                 </motion.button>
             </div>
-        ) : (
+          ) : (
             <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                 Sign Up / Log In
             </motion.button>
-        )}
-    </header>
-)}
+          )}
+        </header>
+      )}
 
       <div className="main-container flex-grow flex flex-col">
-        <AnimatePresence mode="wait">
-          {showLandingPage ? (
-            <motion.div key="landing" {...scaleIn}>
-              <LandingPage onNavigate={handleEnterApp} />
-            </motion.div>
-          ) : (
-            <motion.div key="app" className="w-full h-full" {...scaleIn}>
-              <MainApp
-                token={token}
-                savedKeys={savedKeys}
-                onGuestQuotaExceeded={handleGuestQuotaExceeded}
-                onUserQuotaExceeded={handleUserQuotaExceeded}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <MainApp
+          token={token}
+          savedKeys={savedKeys}
+          onGuestQuotaExceeded={handleGuestQuotaExceeded}
+          onUserQuotaExceeded={handleUserQuotaExceeded}
+        />
       </div>
 
       <AnimatePresence>
@@ -2082,23 +1834,18 @@ const [accountManagerView, setAccountManagerView] = useState('account');
           <motion.div className="modal-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setPanelOpen(false)}>
             <div onClick={(e) => e.stopPropagation()}>
               <AccountManager 
-  token={token} 
-  email={user?.email} 
-  savedKeys={savedKeys} 
-  onKeysChange={loadKeys} 
-  userTier={userTier} 
-  onClose={() => setPanelOpen(false)} 
-  onUpgrade={handleNavigateToUpgrade}
-  activeView={accountManagerView}
-  setActiveView={setAccountManagerView}
-/>
+                token={token} 
+                email={user?.email} 
+                savedKeys={savedKeys} 
+                onKeysChange={loadKeys} 
+                userTier={userTier} 
+                onClose={() => setPanelOpen(false)} 
+                onUpgrade={handleNavigateToUpgrade}
+                activeView={accountManagerView}
+                setActiveView={setAccountManagerView}
+              />
             </div>
           </motion.div>
-        )}
-        {showPricingPage && (
-           <motion.div key="pricing" className="modal-backdrop" {...scaleIn}>
-              <PricingPage onSelectFreePlan={() => setShowPricingPage(false)} onSelectPaidPlan={handleSelectPaidPlan} isUpgradeMode={isUpgradeMode} />
-           </motion.div>
         )}
         {showAuthPage && (
           <motion.div key="auth" className="modal-backdrop" {...scaleIn}>
@@ -2109,4 +1856,3 @@ const [accountManagerView, setAccountManagerView] = useState('account');
     </div>
   );
 }
-
