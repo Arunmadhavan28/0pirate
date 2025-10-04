@@ -14,6 +14,9 @@ import {
 import SyntaxHighlighter from "react-syntax-highlighter";
 import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import ReactMarkdown from 'react-markdown';
+import LandingPage from "./landing_page";
+import PricingPage from "./pricing";
+import Script from 'next/script';
 
 /* --- Interactive Components --- */
 function InteractiveBackground() {
@@ -1700,6 +1703,13 @@ export default function Home() {
       case 'enterprise': return 'bg-emerald-900/50 border-emerald-500/50';
       default: return 'bg-gray-800/50 border-gray-600/50';
     }
+  };
+
+  const handleSelectPaidPlan = (planId: string, billingCycle: "monthly" | "yearly") => {
+    // For now, we'll just log the choice and close the modal.
+    // You can add your checkout logic here later.
+    console.log(`User selected plan: ${planId} (${billingCycle})`);
+    setShowPricingPage(false);
   };
 
   const getBadgeFireGradient = (tier: string | null): string => {
