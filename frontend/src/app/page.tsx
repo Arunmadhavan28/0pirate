@@ -1705,12 +1705,75 @@ export default function Home() {
     }
   };
 
-  const handleSelectPaidPlan = (planId: string, billingCycle: "monthly" | "yearly") => {
-    // For now, we'll just log the choice and close the modal.
-    // You can add your checkout logic here later.
-    console.log(`User selected plan: ${planId} (${billingCycle})`);
-    setShowPricingPage(false);
-  };
+  const handleSelectPaidPlan = async (planId: string, billingCycle: "monthly" | "yearly") => {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/create-order`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      // CHANGE 1: Match the backend's expected field names (snake_case)
+      body: JSON.stringify({
+        plan_id: planId,
+        billing_cycle: billingCycle
+      }),
+    });
+
+    const orderData = await response.json();
+
+    if (!response.ok) {
+      throw new Error(orderData.detail || "Failed to create order.");
+    }
+
+    const options = {
+      // CHANGE 2: Use the key sent from the backend
+      key: orderData.razorpay_key_id,
+      amount: orderData.amount,
+      currency: orderData.currency,
+      name: "0Pirate",
+      description: `Subscription for ${planId} (${billingCycle})`,
+      // CHANGE 3: Use the correct field 'order_id' from the backend response
+      order_id: orderData.order_id,
+      
+      handler: async function (paymentResponse: any) {
+        await fetch(`${BACKEND_URL}/api/verify-payment`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            razorpay_order_id: paymentResponse.razorpay_order_id,
+            razorpay_payment_id: paymentResponse.razorpay_payment_id,
+            razorpay_signature: paymentResponse.razorpay_signature,
+          }),
+        });
+        
+        setShowPricingPage(false);
+        // You might want to refresh the user's profile here to show their new tier
+        if (user) {
+          loadUserProfile(user.id);
+        }
+        alert("Payment Successful! Your plan has been upgraded.");
+      },
+      
+      prefill: {
+        email: user?.email,
+      },
+      theme: {
+        color: "#3B82F6",
+      },
+    };
+
+    const paymentObject = new (window as any).Razorpay(options);
+    paymentObject.open();
+
+  } catch (error) {
+    console.error("Payment failed:", error);
+    alert("An error occurred during payment. Please check the console for details.");
+  }
+};
 
   const getBadgeFireGradient = (tier: string | null): string => {
     const tierLower = tier?.toLowerCase();
@@ -1763,6 +1826,10 @@ export default function Home() {
   
   return (
     <div className="min-h-screen flex flex-col bg-background-deep relative">
+      <Script
+        id="razorpay-checkout-js"
+        src="https://checkout.razorpay.com/v1/checkout.js"
+      />
       <InteractiveBackground />
       <style>{`
         body::before {
