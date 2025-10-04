@@ -1847,6 +1847,17 @@ export default function Home() {
             </div>
           </motion.div>
         )}
+
+        {showPricingPage && (
+       <motion.div key="pricing" className="modal-backdrop" {...scaleIn}>
+          <PricingPage 
+            onClose={() => setShowPricingPage(false)}
+            onSelectFreePlan={() => setShowPricingPage(false)} 
+            onSelectPaidPlan={handleSelectPaidPlan} 
+            isUpgradeMode={isUpgradeMode} 
+          />
+       </motion.div>
+    )}
         {showAuthPage && (
           <motion.div key="auth" className="modal-backdrop" {...scaleIn}>
             <AuthComponent onAuthSuccess={() => setShowAuthPage(false)} />
