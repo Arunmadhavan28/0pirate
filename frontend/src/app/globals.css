@@ -1,5 +1,7 @@
 /* globals.css - FINAL UPGRADED VERSION */
-
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 /* -------------------- Base & Fonts -------------------- */
 * { box-sizing: border-box; }
 html, body, #__next { height: 100%; }

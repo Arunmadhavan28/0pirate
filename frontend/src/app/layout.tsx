@@ -21,7 +21,7 @@ const firaCode = Fira_Code({
 // or the app/ directory root (standard Next.js practice).
 export const metadata: Metadata = {
   // Brand Name & Primary Keyword Focus
-  title: "0Pirate | Zero Pirate Zero-Knowledge AI Code Gateway & Security",
+  title: "0Pirate | Zero-Knowledge AI Code Gateway & Security",
   
   // Clear, keyword-rich description (includes Zero-Trust and AST-Abstraction)
   description: "Secure, refactor, and enhance your code with a Zero-Knowledge AI Gateway. Uses AST-Abstraction to protect IP, enforces LLM quality with a correction loop, and minimizes API costs.",
