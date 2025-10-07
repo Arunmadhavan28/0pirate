@@ -866,12 +866,24 @@ function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTi
   const getTierBadgeProps = (tier: string | null) => {
     const tierLower = tier?.toLowerCase();
     switch (tierLower) {
-      case 'developer': return { tone: 'info', children: 'Developer Plan' };
-      case 'professional': return { tone: 'info', children: 'Professional Plan' };
-      case 'enterprise': return { tone: 'success', children: 'Enterprise' };
-      default: return { tone: 'default', children: 'Free Plan' };
+        case 'developer': 
+            return { tone: 'info', children: 'Developer Plan' };
+        case 'professional': 
+            return { tone: 'info', children: 'Professional Plan' };
+        case 'enterprise': 
+            return { tone: 'success', children: 'Enterprise' };
+        default: 
+            // This is the upgraded style for the Free Plan badge
+            return { 
+                tone: 'free', // Custom tone for more specific styling if needed
+                children: (
+                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-gray-700/50 border border-gray-500/50 text-gray-200 text-xs font-medium">
+                        Free Plan
+                    </span>
+                )
+            };
     }
-  };
+};
 
   const navItems = [{ id: 'account', label: 'Account', icon: User }, { id: 'api_keys', label: 'API Keys', icon: KeyRound }];
 
@@ -908,44 +920,56 @@ function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTi
             <main className="settings-content">
                 <AnimatePresence mode="wait">
                     {activeView === 'account' && (
-                        <motion.div key="account" variants={fadeInUp} initial="initial" animate="animate" exit="exit" className="space-y-8">
-                            <motion.div className="settings-section">
-                                <h3 className="flex items-center gap-3"><User size={24} className="text-accent-primary" /> Account Information</h3>
-                                <div className="settings-row">
-                                    <div className="settings-row-info">
-                                        <label>Email Address</label>
-                                        <p className="font-mono">{email}</p>
-                                    </div>
-                                </div>
-                            </motion.div>
-                            <motion.div className="settings-section">
-                                <h3 className="flex items-center gap-3"><Zap size={24} className="text-accent-primary" /> Subscription</h3>
-                                <div className="settings-row bg-background-light/30 p-4 rounded-xl border border-border-primary">
-                                    <div className="settings-row-info">
-                                        <label>Current Plan</label>
-                                        <div className="mt-2">
-                                            <Badge {...getTierBadgeProps(userTier)}/>
-                                        </div>
-                                    </div>
-                                    <motion.button onClick={onUpgrade} className="btn btn-primary" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                        Upgrade Plan
-                                    </motion.button>
-                                </div>
-                            </motion.div>
-                            <motion.div className="settings-section">
-                                <h3 className="flex items-center gap-3"><Settings size={24} className="text-accent-primary" /> Account Actions</h3>
-                                <div className="settings-row">
-                                    <div className="settings-row-info">
-                                        <label>Sign Out</label>
-                                        <p>Sign out of your account</p>
-                                    </div>
-                                    <motion.button onClick={handleSignOut} className="btn btn-secondary" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                                        <LogOut size={16} /> Sign Out
-                                    </motion.button>
-                                </div>
-                            </motion.div>
-                        </motion.div>
-                    )}
+    <motion.div 
+        key="account" 
+        variants={fadeInUp} 
+        initial="initial" 
+        animate="animate" 
+        exit={{ opacity: 0, transition: { duration: 0.1 } }} 
+        className="space-y-8"
+    >
+        {/* Section 1: Account Information */}
+        <div className="settings-section">
+            <h3 className="flex items-center gap-3"><User size={24} className="text-accent-primary" /> Account Information</h3>
+            <div className="settings-row mt-6">
+                <div className="settings-row-info">
+                    <label>Email Address</label>
+                    <p className="font-mono text-text-secondary">{email}</p>
+                </div>
+            </div>
+        </div>
+
+        {/* Section 2: Subscription */}
+        <div className="settings-section">
+            <h3 className="flex items-center gap-3"><Zap size={24} className="text-accent-primary" /> Subscription</h3>
+            <div className="settings-row mt-6">
+                <div className="settings-row-info">
+                    <label>Current Plan</label>
+                    <div className="mt-1">
+                        <Badge {...getTierBadgeProps(userTier)}/>
+                    </div>
+                </div>
+                <motion.button onClick={onUpgrade} className="btn btn-primary" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    Upgrade Plan
+                </motion.button>
+            </div>
+        </div>
+
+        {/* Section 3: Account Actions */}
+        <div className="settings-section">
+            <h3 className="flex items-center gap-3"><Settings size={24} className="text-accent-primary" /> Account Actions</h3>
+            <div className="settings-row mt-6">
+                <div className="settings-row-info">
+                    <label>Sign Out</label>
+                    <p className="text-sm text-text-secondary">You will be returned to the login screen.</p>
+                </div>
+                <motion.button onClick={handleSignOut} className="btn btn-secondary" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <LogOut size={16} /> Sign Out
+                </motion.button>
+            </div>
+        </div>
+    </motion.div>
+)}
                     {activeView === 'api_keys' && (<ApiKeysView token={token} savedKeys={savedKeys} onKeysChange={onKeysChange} />)}
                 </AnimatePresence>
             </main>
