@@ -137,11 +137,21 @@ function useCursorGlow(ref: React.RefObject<HTMLElement>) {
    Small Reusable Components
 ---------------------------------------------------*/
 const Badge = ({ children, tone = "default" }: { children: React.ReactNode; tone?: string }) => {
-    const cls = tone === "success" 
-        ? "inline-flex items-center px-3 py-1 rounded-full bg-emerald-600/20 border border-emerald-600/30 text-emerald-300 text-xs font-medium" 
-        : tone === "info" 
-        ? "inline-flex items-center px-3 py-1 rounded-full bg-blue-600/20 border border-blue-600/30 text-blue-300 text-xs font-medium" 
-        : "inline-flex items-center px-3 py-1 rounded-full bg-gray-500/20 border border-gray-500/30 text-gray-300 text-xs font-medium"; 
+    let cls = "";
+    switch(tone) {
+        case "success":
+            cls = "inline-flex items-center px-3 py-1 rounded-full bg-emerald-600/20 border border-emerald-600/30 text-emerald-300 text-xs font-medium";
+            break;
+        case "info":
+            cls = "inline-flex items-center px-3 py-1 rounded-full bg-blue-600/20 border border-blue-600/30 text-blue-300 text-xs font-medium";
+            break;
+        case "free":
+            // --- UPGRADED "FREE" BADGE STYLE ---
+            cls = "inline-flex items-center px-3 py-1 rounded-full bg-gray-800 border border-gray-600/80 text-gray-300 text-xs font-medium shadow-inner shadow-black/20";
+            break;
+        default:
+            cls = "inline-flex items-center px-3 py-1 rounded-full bg-gray-500/20 border border-gray-500/30 text-gray-300 text-xs font-medium";
+    }
     return <span className={cls}>{children}</span>; 
 };
 
@@ -866,22 +876,10 @@ function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTi
   const getTierBadgeProps = (tier: string | null) => {
     const tierLower = tier?.toLowerCase();
     switch (tierLower) {
-        case 'developer': 
-            return { tone: 'info', children: 'Developer Plan' };
-        case 'professional': 
-            return { tone: 'info', children: 'Professional Plan' };
-        case 'enterprise': 
-            return { tone: 'success', children: 'Enterprise' };
-        default: 
-            // This is the upgraded style for the Free Plan badge
-            return { 
-                tone: 'free', // Custom tone for more specific styling if needed
-                children: (
-                    <span className="inline-flex items-center px-3 py-1 rounded-full bg-gray-700/50 border border-gray-500/50 text-gray-200 text-xs font-medium">
-                        Free Plan
-                    </span>
-                )
-            };
+      case 'developer': return { tone: 'info', children: 'Developer Plan' };
+      case 'professional': return { tone: 'info', children: 'Professional Plan' };
+      case 'enterprise': return { tone: 'success', children: 'Enterprise' };
+      default: return { tone: 'free', children: 'Free Plan' }; // Use the new 'free' tone
     }
 };
 
@@ -931,7 +929,7 @@ function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTi
         {/* Section 1: Account Information */}
         <div className="settings-section">
             <h3 className="flex items-center gap-3"><User size={24} className="text-accent-primary" /> Account Information</h3>
-            <div className="settings-row mt-6">
+            <div className="settings-row mt-6 py-2"> {/* Added py-2 */}
                 <div className="settings-row-info">
                     <label>Email Address</label>
                     <p className="font-mono text-text-secondary">{email}</p>
@@ -942,7 +940,7 @@ function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTi
         {/* Section 2: Subscription */}
         <div className="settings-section">
             <h3 className="flex items-center gap-3"><Zap size={24} className="text-accent-primary" /> Subscription</h3>
-            <div className="settings-row mt-6">
+            <div className="settings-row mt-6 py-2"> {/* Added py-2 */}
                 <div className="settings-row-info">
                     <label>Current Plan</label>
                     <div className="mt-1">
@@ -958,7 +956,7 @@ function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTi
         {/* Section 3: Account Actions */}
         <div className="settings-section">
             <h3 className="flex items-center gap-3"><Settings size={24} className="text-accent-primary" /> Account Actions</h3>
-            <div className="settings-row mt-6">
+            <div className="settings-row mt-6 py-2"> {/* Added py-2 */}
                 <div className="settings-row-info">
                     <label>Sign Out</label>
                     <p className="text-sm text-text-secondary">You will be returned to the login screen.</p>
@@ -1874,61 +1872,63 @@ export default function Home() {
     // 2. If false, show the complete app UI (Header + MainApp)
     <>
         <header className="main-container app-header py-6 flex justify-between items-center">
-            {/* The entire header content goes here */}
-            <div className="flex items-center gap-4">
-                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
-                    <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
-                    <p className="app-tagline">Secure & Refactor Your Code with AI</p>
+    <div className="flex items-center gap-4">
+        {/* Vertically align branding */}
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }} className="flex flex-col">
+            <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
+            <p className="app-tagline -mt-1">Secure & Refactor Your Code with AI</p>
+        </motion.div>
+
+        {/* Upgraded and better-placed badge */}
+        <AnimatePresence>
+            {user && userTier && (
+                <motion.div
+                    key={userTier}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.5 }}
+                    className={`relative rounded-full px-4 py-1.5 text-sm font-bold uppercase tracking-wider text-white shadow-lg ${getBadgeClassName(userTier)}`}
+                    style={{ overflow: 'hidden' }}
+                >
+                    <span className="relative z-10">{getTierBadgeText(userTier)}</span>
+                    <motion.div 
+                        className="absolute inset-[-150%] z-0"
+                        style={{ background: getBadgeFireGradient(userTier) }}
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                    />
                 </motion.div>
-
-                <AnimatePresence>
-                    {user && userTier && (
-                        <motion.div
-                            key={userTier}
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.8 }}
-                            transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.5 }}
-                            className={`relative rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-lg ${getBadgeClassName(userTier)}`}
-                            style={{ overflow: 'hidden' }}
-                        >
-                            <span className="relative z-10">{getTierBadgeText(userTier)}</span>
-                            <motion.div 
-                                className="absolute inset-[-150%] z-0"
-                                style={{ background: getBadgeFireGradient(userTier) }}
-                                animate={{ rotate: 360 }}
-                                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                            />
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-            </div>
-
-            {user ? (
-                <div className="flex items-center gap-3">
-                    <motion.button 
-                        onClick={() => { setAccountManagerView('api_keys'); setPanelOpen(true); }} 
-                        className="btn bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 group"
-                        initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
-                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                    >
-                        <KeyRound size={16} /> Add API Key
-                    </motion.button>
-                    <motion.button 
-                        onClick={() => { setAccountManagerView('account'); setPanelOpen(true); }} 
-                        className="btn btn-secondary group"
-                        initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
-                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                    >
-                        <User size={16} className="group-hover:scale-110 transition-transform" /> Account
-                    </motion.button>
-                </div>
-            ) : (
-                <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    Sign Up / Log In
-                </motion.button>
             )}
-        </header>
+        </AnimatePresence>
+    </div>
+
+    {/* User actions on the right remain the same */}
+    {user ? (
+        <div className="flex items-center gap-3">
+            <motion.button 
+                onClick={() => { setAccountManagerView('api_keys'); setPanelOpen(true); }} 
+                className="btn bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 group"
+                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
+                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            >
+                <KeyRound size={16} /> Add API Key
+            </motion.button>
+            <motion.button 
+                onClick={() => { setAccountManagerView('account'); setPanelOpen(true); }} 
+                className="btn btn-secondary group"
+                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
+                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+            >
+                <User size={16} className="group-hover:scale-110 transition-transform" /> Account
+            </motion.button>
+        </div>
+    ) : (
+        <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            Sign Up / Log In
+        </motion.button>
+    )}
+</header>
 
         <div className="main-container flex-grow flex flex-col">
             <MainApp
