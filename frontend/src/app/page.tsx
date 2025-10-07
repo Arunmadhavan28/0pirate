@@ -789,27 +789,24 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
             </motion.div>
 
             <motion.div 
-                className="space-y-6"
-                variants={fadeInUp}
-                initial="initial"
-                animate="animate"
-                transition={{ delay: 0.1 }}
-            >
-                <div className="flex items-center gap-3">
+    className="space-y-2"
+    variants={fadeInUp}
+    initial="initial"
+    animate="animate"
+    transition={{ delay: 0.1 }}
+>
+    <div className="flex items-center gap-3 mb-4">
         <Settings size={24} className="text-accent-primary" />
         <h3 className="text-2xl font-semibold">Saved Keys</h3>
-        {savedKeys.length > 0 && (
-            <Badge tone="info">{savedKeys.length} keys</Badge>
-        )}
+        {savedKeys.length > 0 && (<Badge tone="info">{savedKeys.length} keys</Badge>)}
     </div>
     
     {savedKeys.length > 0 ? (
-        <div className="flex flex-col rounded-xl border border-border-primary">
+        <div className="flex flex-col">
             {savedKeys.map((key, index) => (
                 <motion.div 
                     key={key.name} 
-                    // --- THIS IS THE UPDATED, CLEANER STYLE ---
-                    className="settings-row p-4 border-b border-border-primary last:border-b-0 hover:bg-background-light/30 transition-colors duration-200"
+                    className="settings-row py-4 border-b border-border-primary last:border-b-0"
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.05 }}
@@ -821,24 +818,9 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
                             <p className="text-xs text-text-secondary capitalize">Provider: {key.provider}</p>
                         </div>
                     </div>
-                    
                     <div className="flex gap-2">
-                        <motion.button 
-                            onClick={() => handleEditClick(key)} 
-                            className="btn btn-secondary text-sm px-3 py-1.5"
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                        >
-                            <Edit size={14}/> Edit
-                        </motion.button>
-                        <motion.button 
-                            onClick={() => handleDeleteClick(key.name)} 
-                            className="btn btn-destructive text-sm px-3 py-1.5"
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                        >
-                            <Trash2 size={14}/> Delete
-                        </motion.button>
+                        <motion.button onClick={() => handleEditClick(key)} className="btn btn-secondary text-sm px-3 py-1.5"><Edit size={14}/> Edit</motion.button>
+                        <motion.button onClick={() => handleDeleteClick(key.name)} className="btn btn-destructive text-sm px-3 py-1.5"><Trash2 size={14}/> Delete</motion.button>
                     </div>
                 </motion.div>
             ))}
@@ -940,19 +922,25 @@ function AccountManager({ token, email, savedKeys, onKeysChange, onClose, userTi
 
         {/* Section 2: Subscription */}
         <div className="settings-section">
-            <h3 className="flex items-center gap-3"><Zap size={24} className="text-accent-primary" /> Subscription</h3>
-            <div className="settings-row mt-6 py-2"> {/* Added py-2 */}
-                <div className="settings-row-info">
-                    <label>Current Plan</label>
-                    <div className="mt-1">
-                        <Badge {...getTierBadgeProps(userTier)}/>
-                    </div>
-                </div>
-                <motion.button onClick={onUpgrade} className="btn btn-primary" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                    Upgrade Plan
-                </motion.button>
+    <h3 className="flex items-center gap-3"><Zap size={24} className="text-accent-primary" /> Subscription</h3>
+    <div className="settings-row mt-6 py-4">
+        <div className="settings-row-info">
+            <label>Current Plan</label>
+            <div className="mt-1">
+                {(() => {
+                    const tierDisplay = getTierBadgeProps(userTier);
+                    if (typeof tierDisplay === 'string') {
+                        return <p className="text-lg font-semibold text-gray-200">{tierDisplay}</p>;
+                    }
+                    return <Badge {...tierDisplay} />;
+                })()}
             </div>
         </div>
+        <motion.button onClick={onUpgrade} className="btn btn-primary" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            Upgrade Plan
+        </motion.button>
+    </div>
+</div>
 
         {/* Section 3: Account Actions */}
         <div className="settings-section">
