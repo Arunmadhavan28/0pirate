@@ -146,8 +146,8 @@ const Badge = ({ children, tone = "default" }: { children: React.ReactNode; tone
             cls = "inline-flex items-center px-3 py-1 rounded-full bg-blue-600/20 border border-blue-600/30 text-blue-300 text-xs font-medium";
             break;
         case "free":
-            // --- UPGRADED "FREE" BADGE STYLE ---
-            cls = "inline-flex items-center px-3 py-1 rounded-full bg-gray-800 border border-gray-600/80 text-gray-300 text-xs font-medium shadow-inner shadow-black/20";
+            // --- UPGRADED "FREE" BADGE STYLE WITH REFINED SHAPE ---
+            cls = "inline-flex items-center px-3 py-1 rounded-lg bg-gray-800 border border-gray-600/80 text-gray-300 text-xs font-medium shadow-inner shadow-black/20";
             break;
         default:
             cls = "inline-flex items-center px-3 py-1 rounded-full bg-gray-500/20 border border-gray-500/30 text-gray-300 text-xs font-medium";
@@ -796,64 +796,65 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
                 transition={{ delay: 0.1 }}
             >
                 <div className="flex items-center gap-3">
-                    <Settings size={24} className="text-accent-primary" />
-                    <h3 className="text-2xl font-semibold">Saved Keys</h3>
-                    {savedKeys.length > 0 && (
-                        <Badge tone="info">{savedKeys.length} keys</Badge>
-                    )}
-                </div>
-                
-                {savedKeys.length > 0 ? (
-                    <div className="space-y-3">
-                        {savedKeys.map((key, index) => (
-                            <motion.div 
-                                key={key.name} 
-                                className="settings-row bg-background-light/30 p-4 rounded-xl border border-border-primary hover:border-accent-primary/30 transition-all duration-200"
-                                initial={{ opacity: 0, x: -20 }}
-                                animate={{ opacity: 1, x: 0 }}
-                                transition={{ delay: index * 0.05 }}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-2 h-2 bg-accent-primary rounded-full"></div>
-                                    <div>
-                                        <p className="font-mono text-sm font-medium text-text-primary">{key.name}</p>
-                                        <p className="text-xs text-text-secondary capitalize">Provider: {key.provider}</p>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex gap-2">
-                                    <motion.button 
-                                        onClick={() => handleEditClick(key)} 
-                                        className="btn btn-secondary text-sm px-3 py-1.5"
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <Edit size={14}/> Edit
-                                    </motion.button>
-                                    <motion.button 
-                                        onClick={() => handleDeleteClick(key.name)} 
-                                        className="btn btn-destructive text-sm px-3 py-1.5"
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                    >
-                                        <Trash2 size={14}/> Delete
-                                    </motion.button>
-                                </div>
-                            </motion.div>
-                        ))}
+        <Settings size={24} className="text-accent-primary" />
+        <h3 className="text-2xl font-semibold">Saved Keys</h3>
+        {savedKeys.length > 0 && (
+            <Badge tone="info">{savedKeys.length} keys</Badge>
+        )}
+    </div>
+    
+    {savedKeys.length > 0 ? (
+        <div className="flex flex-col rounded-xl border border-border-primary">
+            {savedKeys.map((key, index) => (
+                <motion.div 
+                    key={key.name} 
+                    // --- THIS IS THE UPDATED, CLEANER STYLE ---
+                    className="settings-row p-4 border-b border-border-primary last:border-b-0 hover:bg-background-light/30 transition-colors duration-200"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                >
+                    <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 bg-accent-primary rounded-full"></div>
+                        <div>
+                            <p className="font-mono text-sm font-medium text-text-primary">{key.name}</p>
+                            <p className="text-xs text-text-secondary capitalize">Provider: {key.provider}</p>
+                        </div>
                     </div>
-                ) : (
-                    <motion.div 
-                        className="text-center py-12 px-6 border border-dashed border-border-primary rounded-xl"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                    >
-                        <KeyRound size={48} className="mx-auto text-text-secondary mb-4" />
-                        <p className="text-text-secondary text-lg mb-2">No API keys saved yet</p>
-                        <p className="text-text-secondary/70 text-sm">Add your first API key to get started with AI-powered code analysis</p>
-                    </motion.div>
-                )}
-            </motion.div>
+                    
+                    <div className="flex gap-2">
+                        <motion.button 
+                            onClick={() => handleEditClick(key)} 
+                            className="btn btn-secondary text-sm px-3 py-1.5"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                        >
+                            <Edit size={14}/> Edit
+                        </motion.button>
+                        <motion.button 
+                            onClick={() => handleDeleteClick(key.name)} 
+                            className="btn btn-destructive text-sm px-3 py-1.5"
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                        >
+                            <Trash2 size={14}/> Delete
+                        </motion.button>
+                    </div>
+                </motion.div>
+            ))}
+        </div>
+    ) : (
+        <motion.div 
+            className="text-center py-12 px-6 border border-dashed border-border-primary rounded-xl"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+        >
+            <KeyRound size={48} className="mx-auto text-text-secondary mb-4" />
+            <p className="text-text-secondary text-lg mb-2">No API keys saved yet</p>
+            <p className="text-text-secondary/70 text-sm">Add your first API key to get started with AI-powered code analysis</p>
+        </motion.div>
+    )}
+</motion.div>
             
             <ConfirmationModal
                 isOpen={isConfirmModalOpen}
