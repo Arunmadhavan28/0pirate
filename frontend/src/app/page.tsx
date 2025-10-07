@@ -1675,7 +1675,7 @@ export default function Home() {
   const [savedKeys, setSavedKeys] = useState<{ name: string; provider: string }[]>([]);
   const [userTier, setUserTier] = useState<string | null>(null);
   const [accountManagerView, setAccountManagerView] = useState('account');
-  const [showLandingPage, setShowLandingPage] = useState(false);
+  const [showLandingPage, setShowLandingPage] = useState(true);
   const [showPricingPage, setShowPricingPage] = useState(false);
   const [showAuthPage, setShowAuthPage] = useState(false);
   const [isUpgradeMode, setIsUpgradeMode] = useState(false);
@@ -1839,72 +1839,81 @@ export default function Home() {
         }
       `}</style>
       
-      {!showLandingPage && (
+      
+
+{showLandingPage ? (
+    // 1. If true, show ONLY the LandingPage
+    <LandingPage onNavigate={handleEnterApp} />
+) : (
+    // 2. If false, show the complete app UI (Header + MainApp)
+    <>
         <header className="main-container app-header py-6 flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
-              <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
-              <p className="app-tagline">Secure & Refactor Your Code with AI</p>
-            </motion.div>
-
-            <AnimatePresence>
-              {user && userTier && (
-                <motion.div
-                  key={userTier}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.5 }}
-                  className={`relative rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-lg ${getBadgeClassName(userTier)}`}
-                  style={{ overflow: 'hidden' }}
-                >
-                  <span className="relative z-10">{getTierBadgeText(userTier)}</span>
-                  <motion.div 
-                    className="absolute inset-[-150%] z-0"
-                    style={{ background: getBadgeFireGradient(userTier) }}
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                  />
+            {/* The entire header content goes here */}
+            <div className="flex items-center gap-4">
+                <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }}>
+                    <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
+                    <p className="app-tagline">Secure & Refactor Your Code with AI</p>
                 </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
 
-          {user ? (
-            <div className="flex items-center gap-3">
-                <motion.button 
-                    onClick={() => { setAccountManagerView('api_keys'); setPanelOpen(true); }} 
-                    className="btn bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 group"
-                    initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
-                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                >
-                    <KeyRound size={16} /> Add API Key
-                </motion.button>
-                <motion.button 
-                    onClick={() => { setAccountManagerView('account'); setPanelOpen(true); }} 
-                    className="btn btn-secondary group"
-                    initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
-                    whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-                >
-                    <User size={16} className="group-hover:scale-110 transition-transform" /> Account
-                </motion.button>
+                <AnimatePresence>
+                    {user && userTier && (
+                        <motion.div
+                            key={userTier}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.5 }}
+                            className={`relative rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white shadow-lg ${getBadgeClassName(userTier)}`}
+                            style={{ overflow: 'hidden' }}
+                        >
+                            <span className="relative z-10">{getTierBadgeText(userTier)}</span>
+                            <motion.div 
+                                className="absolute inset-[-150%] z-0"
+                                style={{ background: getBadgeFireGradient(userTier) }}
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                            />
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
-          ) : (
-            <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-                Sign Up / Log In
-            </motion.button>
-          )}
-        </header>
-      )}
 
-      <div className="main-container flex-grow flex flex-col">
-        <MainApp
-          token={token}
-          savedKeys={savedKeys}
-          onGuestQuotaExceeded={handleGuestQuotaExceeded}
-          onUserQuotaExceeded={handleUserQuotaExceeded}
-        />
-      </div>
+            {user ? (
+                <div className="flex items-center gap-3">
+                    <motion.button 
+                        onClick={() => { setAccountManagerView('api_keys'); setPanelOpen(true); }} 
+                        className="btn bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 group"
+                        initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
+                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                    >
+                        <KeyRound size={16} /> Add API Key
+                    </motion.button>
+                    <motion.button 
+                        onClick={() => { setAccountManagerView('account'); setPanelOpen(true); }} 
+                        className="btn btn-secondary group"
+                        initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
+                        whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                    >
+                        <User size={16} className="group-hover:scale-110 transition-transform" /> Account
+                    </motion.button>
+                </div>
+            ) : (
+                <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    Sign Up / Log In
+                </motion.button>
+            )}
+        </header>
+
+        <div className="main-container flex-grow flex flex-col">
+            <MainApp
+                token={token}
+                savedKeys={savedKeys}
+                onGuestQuotaExceeded={handleGuestQuotaExceeded}
+                onUserQuotaExceeded={handleUserQuotaExceeded}
+            />
+        </div>
+    </>
+)}
 
       <AnimatePresence>
         {panelOpen && (
