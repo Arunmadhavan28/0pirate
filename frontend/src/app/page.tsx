@@ -1862,13 +1862,20 @@ export default function Home() {
     <>
         <header className="main-container app-header py-6 flex justify-between items-center">
     <div className="flex items-center gap-4">
-        {/* Vertically align branding */}
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6 }} className="flex flex-col">
-            <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">0Pirate</h1>
+        {/* Logo and tagline */}
+        <motion.div 
+            initial={{ opacity: 0, x: -20 }} 
+            animate={{ opacity: 1, x: 0 }} 
+            transition={{ duration: 0.6 }} 
+            className="flex flex-col"
+        >
+            <h1 className="app-title bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent">
+                0Pirate
+            </h1>
             <p className="app-tagline -mt-1">Secure & Refactor Your Code with AI</p>
         </motion.div>
 
-        {/* Upgraded and better-placed badge */}
+        {/* Enhanced Tier Badge - Properly centered */}
         <AnimatePresence>
             {user && userTier && (
                 <motion.div
@@ -1876,48 +1883,82 @@ export default function Home() {
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
-                    transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.5 }}
-                    className={`relative rounded-full px-4 py-1.5 text-sm font-bold uppercase tracking-wider text-white shadow-lg ${getBadgeClassName(userTier)}`}
-                    style={{ overflow: 'hidden' }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.3 }}
+                    className={`tier-badge ${getBadgeClassName(userTier)}`}
+                    style={{ alignSelf: 'center' }}
                 >
-                    <span className="relative z-10">{getTierBadgeText(userTier)}</span>
-                    <motion.div 
-                        className="absolute inset-[-150%] z-0"
-                        style={{ background: getBadgeFireGradient(userTier) }}
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                    />
+                    {/* Tier text */}
+                    <span className="relative z-20 drop-shadow-lg">
+                        {getTierBadgeText(userTier)}
+                    </span>
+                    
+                    {/* Animated rotating gradient background */}
+                    <div className="absolute inset-0 z-0 overflow-hidden rounded-full">
+                        <motion.div
+                            className="absolute top-1/2 left-1/2 w-[200%] h-[200%] -translate-x-1/2 -translate-y-1/2 opacity-50"
+                            style={{ background: getBadgeFireGradient(userTier) }}
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                        />
+                    </div>
+                    
+                    {/* Shimmer effect */}
+                    <div className="absolute inset-0 z-10 overflow-hidden rounded-full">
+                        <motion.div
+                            className="absolute inset-0 w-full h-full"
+                            style={{
+                                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%)',
+                            }}
+                            animate={{ x: ['-100%', '200%'] }}
+                            transition={{ duration: 2, repeat: Infinity, ease: "linear", repeatDelay: 1 }}
+                        />
+                    </div>
                 </motion.div>
             )}
         </AnimatePresence>
     </div>
 
-    {/* User actions on the right remain the same */}
+    {/* User actions on the right */}
     {user ? (
         <div className="flex items-center gap-3">
             <motion.button 
                 onClick={() => { setAccountManagerView('api_keys'); setPanelOpen(true); }} 
                 className="btn bg-emerald-500/20 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 group"
-                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.3 }}
-                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                initial={{ opacity: 0, x: 20 }} 
+                animate={{ opacity: 1, x: 0 }} 
+                transition={{ duration: 0.6, delay: 0.3 }}
+                whileHover={{ scale: 1.05 }} 
+                whileTap={{ scale: 0.95 }}
             >
                 <KeyRound size={16} /> Add API Key
             </motion.button>
             <motion.button 
                 onClick={() => { setAccountManagerView('account'); setPanelOpen(true); }} 
                 className="btn btn-secondary group"
-                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }}
-                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+                initial={{ opacity: 0, x: 20 }} 
+                animate={{ opacity: 1, x: 0 }} 
+                transition={{ duration: 0.6, delay: 0.2 }}
+                whileHover={{ scale: 1.05 }} 
+                whileTap={{ scale: 0.95 }}
             >
                 <User size={16} className="group-hover:scale-110 transition-transform" /> Account
             </motion.button>
         </div>
     ) : (
-        <motion.button onClick={() => setShowAuthPage(true)} className="btn btn-primary group" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.2 }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+        <motion.button 
+            onClick={() => setShowAuthPage(true)} 
+            className="btn btn-primary group" 
+            initial={{ opacity: 0, x: 20 }} 
+            animate={{ opacity: 1, x: 0 }} 
+            transition={{ duration: 0.6, delay: 0.2 }} 
+            whileHover={{ scale: 1.05 }} 
+            whileTap={{ scale: 0.95 }}
+        >
             Sign Up / Log In
         </motion.button>
     )}
 </header>
+
 
         <div className="main-container flex-grow flex flex-col">
             <MainApp

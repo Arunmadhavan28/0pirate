@@ -81,6 +81,59 @@ body {
 }
 .card-space-y > *:not(:last-child) { margin-bottom: 1rem; }
 
+/* -------------------- Tier Badge (e.g., FREE / PRO / ENTERPRISE) -------------------- */
+
+.tier-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  overflow: hidden !important; /* Ensures animation is contained */
+  line-height: 1; /* Centers text vertically */
+  vertical-align: middle;
+  z-index: 1;
+}
+
+.tier-badge span {
+  position: relative;
+  z-index: 10;
+}
+
+.tier-badge-bg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 150%;
+  height: 150%;
+  transform: translate(-50%, -50%);
+  opacity: 0.6;
+  z-index: 0;
+  border-radius: inherit;
+}
+
+.tier-badge--free {
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tier-badge--pro {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+  color: white;
+}
+
+.tier-badge--enterprise {
+  background: linear-gradient(90deg, #9333ea, #a855f7);
+  color: white;
+}
+
+
 /* -------------------- Cursor Glow Effect -------------------- */
 .interactive-card::before {
   content: "";
