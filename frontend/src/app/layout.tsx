@@ -2,8 +2,8 @@
 import type { Metadata } from "next";
 import { Inter, Fira_Code } from "next/font/google";
 import "./globals.css";
-import { Analytics } from "@vercel/analytics/next"; // <-- ADD THIS LINE
-import { SpeedInsights } from "@vercel/speed-insights/next"; // <-- ADD THIS LINE
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 
 const inter = Inter({ 
@@ -16,13 +16,52 @@ const firaCode = Fira_Code({
   variable: '--font-fira-code',
 });
 
+// --- FIXED AND OPTIMIZED METADATA ---
+// Assuming the favicon.ico from the provided path is moved to the public/ directory 
+// or the app/ directory root (standard Next.js practice).
 export const metadata: Metadata = {
-  title: "0Pirate: AI-Powered Code Security & Refactoring",
-  description: "Secure, refactor, and enhance your code with the power of LLMs. Handles single files, multi-file projects, and zip uploads with maximum privacy.",
+  // Brand Name & Primary Keyword Focus
+  title: "0Pirate (Zero Pirate) | Zero-Trust AI Code Gateway & Security",
+  
+  // Clear, keyword-rich description (includes Zero-Trust and AST-Abstraction)
+  description: "Secure, refactor, and enhance your code with a Zero-Trust AI Gateway. Uses AST-Abstraction to protect IP, enforces LLM quality with a correction loop, and minimizes API costs.",
+  
+  // Keywords (helps Google understand the niche)
+  keywords: ["AI code security", "Zero-Trust", "AST Abstraction", "LLM code fix", "DevSecOps", "0Pirate"],
+
+  // Canonical URL (CRITICAL for avoiding duplication issues)
+  alternates: {
+    canonical: 'https://www.0pirate.com',
+  },
+
+  // Open Graph (Social Sharing / LinkedIn Card Optimization)
+  openGraph: {
+    title: '0Pirate: Zero-Trust AI Code Gateway',
+    description: 'The secure AI platform that uses AST-Abstraction to eliminate IP exposure during code fixes and refactoring.',
+    url: 'https://www.0pirate.com',
+    siteName: '0Pirate',
+    images: [
+      {
+        // Using the /favicon.ico path is correct if the file is in the root of the app/ or public/ directory.
+        // NOTE: For OG images, a large .jpg or .png is better than a small .ico.
+        url: 'https://www.0pirate.com/0pirate-logo-large.png', // Suggesting a dedicated, large OG image
+        width: 1200,
+        height: 630,
+        alt: '0Pirate Zero-Trust AI Gateway Logo',
+      },
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+
+   // Icons configuration now points to the correct static asset path (no change needed for the path itself)
    icons: {
-    icon: '/favicon.ico', // This points to the favicon in the /app directory
+    icon: '/favicon.ico', 
+    // You can also add a high-res apple touch icon if needed
+    // apple: '/apple-icon.png', 
   },
 };
+// --- END OPTIMIZED METADATA ---
 
 export default function RootLayout({
   children,

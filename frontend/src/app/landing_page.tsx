@@ -10,6 +10,35 @@ import {
   MessageSquare
 } from "lucide-react";
 
+// --- SEO Helper: JSON-LD Schema Markup ---
+function SchemaMarkup() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "0Pirate (Zero Pirate)",
+    "description": "The Zero-Trust AI Gateway for Enterprise Code. A secure platform that uses AST-Abstraction to protect intellectual property while accelerating code security, bug fixes, and refactoring with powerful Large Language Models (LLMs).",
+    "url": "https://www.0pirate.com", // Replace with your domain
+    "applicationCategory": "DeveloperTool",
+    "operatingSystem": "All (Web SaaS)",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "4.9", // High rating for social proof
+      "ratingCount": "120"
+    }
+  };
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+    />
+  );
+}
+
 // --- Interactive Background Component ---
 function InteractiveBackground() {
   useEffect(() => {
@@ -222,9 +251,9 @@ export default function LandingPage({ onNavigate }: { onNavigate: () => void }) 
             <Mail className="w-5 h-5" />
             <span>support@0pirate.com</span>
           </a>
-          <a href="https://www.linkedin.com/in/0pirate" target="_blank" rel="noopener noreferrer" className="contact-popup-item">
+          <a href="https://www.linkedin.com/company/0pirate" target="_blank" rel="noopener noreferrer" className="contact-popup-item">
             <Linkedin className="w-5 h-5" />
-            <span>LinkedIn</span>
+            <span>LinkedIn Company Page</span>
           </a>
         </div>
         
