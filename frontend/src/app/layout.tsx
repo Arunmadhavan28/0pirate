@@ -21,13 +21,13 @@ const firaCode = Fira_Code({
 // or the app/ directory root (standard Next.js practice).
 export const metadata: Metadata = {
   // Brand Name & Primary Keyword Focus
-  title: "0Pirate (Zero Pirate) | Zero-Trust AI Code Gateway & Security",
+  title: "0Pirate | Zero Pirate Zero-Knowledge AI Code Gateway & Security",
   
   // Clear, keyword-rich description (includes Zero-Trust and AST-Abstraction)
-  description: "Secure, refactor, and enhance your code with a Zero-Trust AI Gateway. Uses AST-Abstraction to protect IP, enforces LLM quality with a correction loop, and minimizes API costs.",
+  description: "Secure, refactor, and enhance your code with a Zero-Knowledge AI Gateway. Uses AST-Abstraction to protect IP, enforces LLM quality with a correction loop, and minimizes API costs.",
   
   // Keywords (helps Google understand the niche)
-  keywords: ["AI code security", "Zero-Trust", "AST Abstraction", "LLM code fix", "DevSecOps", "0Pirate"],
+  keywords: ["AI code security","Zero Knowledge", "Zero-Trust","Zero pirate", "AST Abstraction", "LLM code fix", "DevSecOps", "0Pirate"],
 
   // Canonical URL (CRITICAL for avoiding duplication issues)
   alternates: {
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
 
   // Open Graph (Social Sharing / LinkedIn Card Optimization)
   openGraph: {
-    title: '0Pirate: Zero-Trust AI Code Gateway',
+    title: '0Pirate: Zero-Knowledge AI Code Gateway',
     description: 'The secure AI platform that uses AST-Abstraction to eliminate IP exposure during code fixes and refactoring.',
     url: 'https://www.0pirate.com',
     siteName: '0Pirate',
@@ -47,7 +47,7 @@ export const metadata: Metadata = {
         url: 'https://www.0pirate.com/0pirate-logo-large.png', // Suggesting a dedicated, large OG image
         width: 1200,
         height: 630,
-        alt: '0Pirate Zero-Trust AI Gateway Logo',
+        alt: '0Pirate Zero-Knowledge Zero Pirate AI Gateway Logo',
       },
     ],
     locale: 'en_US',

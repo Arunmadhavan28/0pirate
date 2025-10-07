@@ -257,10 +257,13 @@ export default function PricingPage({
       <div className="pricing-container max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="flex items-center gap-2 text-gray-300 hover:text-white">
-            <ChevronLeft size={18} />
-            <span>Back to Account</span>
-          </button>
+          <button
+  onClick={onClose}
+  className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-gray-300 transition-colors hover:bg-gray-700/50 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500/50"
+>
+  <ChevronLeft size={16} />
+  <span>Back to Account</span>
+</button>
         </div>
         <h1 className="text-5xl font-extrabold text-center mt-6 bg-clip-text text-transparent bg-gradient-to-r from-white via-gray-200 to-gray-400">
           Plans & Pricing
@@ -315,13 +318,14 @@ export default function PricingPage({
                   ? "₹0"
                   : formatPrice(billingCycle === "monthly" ? plan.monthly.price : plan.yearly.price, plan.currency)}
               </div>
-              <ul className="text-sm text-gray-300 space-y-2 mb-6">
-                {plan.features.map((f, i) => (
-                  <li key={i} className="flex gap-2 items-start">
-                    <Check className="w-4 h-4 text-emerald-400" /> {f}
-                  </li>
-                ))}
-              </ul>
+              <ul className="list-none text-sm text-gray-300 space-y-2 mb-6">
+  {plan.features.map((f, i) => (
+    <li key={i} className="flex gap-2 items-start">
+      <Check className="w-4 h-4 mt-0.5 flex-shrink-0 text-emerald-400" />
+      <span>{f}</span>
+    </li>
+  ))}
+</ul>
               <div className="mt-auto">
                 {plan.id === "free" && (
                   <button onClick={onSelectFreePlan} className="btn btn-secondary w-full">
