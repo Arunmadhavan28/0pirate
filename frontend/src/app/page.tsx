@@ -318,12 +318,12 @@ function QuotaExceededModal({ isOpen, onClose, onUpgrade, userTier }: {
   return (
     <AnimatePresence>
       <motion.div
-        className="modal-backdrop backdrop-blur-sm"
+        className="modal-backdrop backdrop-blur-sm flex items-center justify-center"
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
       >
         <motion.div
-          className="modal-panel max-w-md mx-auto mt-20 text-center"
+          className="modal-panel max-w-md mx-auto text-center"
           variants={scaleIn}
           initial="initial" animate="animate" exit="exit"
           onClick={(e) => e.stopPropagation()}
