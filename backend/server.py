@@ -140,10 +140,14 @@ async def check_tier_quota(user_id: str, tier: str):
         job_count = count_resp.count if count_resp.count is not None else 0
         if job_count >= limits["max_jobs_per_day"]:
             raise HTTPException(status_code=429, detail="Daily job limit exceeded for your tier")
+    except HTTPException as http_exc:
+        # This is the crucial change: re-raise the specific 429 error
+        raise http_exc
     except Exception as e:
         logger.error(f"Quota check failed for user {user_id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Quota check failed")
-
+        # This now only runs for TRUE internal errors (e.g., database down)
+        raise HTTPException(status_code=500, detail="Could not verify usage quota.")
+    
 async def check_anonymous_quota(req: Request):
     ip = req.client.host
     try:
@@ -158,10 +162,12 @@ async def check_anonymous_quota(req: Request):
         if job_count >= TIER_LIMITS["free"]["max_jobs_per_day"]:
             raise HTTPException(status_code=429, detail="Daily anonymous job limit exceeded")
     except HTTPException as http_exc:
+        # Re-raise the specific 429 error
         raise http_exc
     except Exception as e:
         logger.error(f"Anonymous quota check failed for IP {ip}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Quota check failed")
+        # This now only runs for TRUE internal errors
+        raise HTTPException(status_code=500, detail="Could not verify usage quota.")
 
 def get_api_key_for_provider(provider_name: str, user_api_key: Optional[str] = None) -> Optional[str]:
     provider_name = provider_name.lower()
