@@ -8,7 +8,7 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from
 import {
   User, Bot, Terminal, Clipboard, ClipboardCheck, LogOut, Github, Mail, KeyRound,
   Trash2, X, ShieldCheck, FileText, Zap, HelpCircle, Code, Settings, Edit, ChevronLeft, Loader2, MessageSquare, ExternalLink,
-  UploadCloud, ClipboardPaste
+  UploadCloud, ClipboardPaste, Crown
 } from "lucide-react";
 
 import SyntaxHighlighter from "react-syntax-highlighter";
@@ -302,6 +302,68 @@ const AuthComponent = ({ onAuthSuccess }: { onAuthSuccess: () => void; }) => {
     </div>
   );
 };
+
+// ==============================================================================
+// --- NEW COMPONENT: QuotaExceededModal ---
+// This modal provides a polished, user-friendly upgrade prompt.
+// ==============================================================================
+function QuotaExceededModal({ isOpen, onClose, onUpgrade, userTier }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onUpgrade: () => void;
+  userTier: string | null;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        className="modal-backdrop backdrop-blur-sm"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
+      >
+        <motion.div
+          className="modal-panel max-w-md mx-auto mt-20 text-center"
+          variants={scaleIn}
+          initial="initial" animate="animate" exit="exit"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-8 space-y-6">
+            <div className="flex justify-center">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-yellow-500/20">
+                    <Crown size={32} className="text-white"/>
+                </div>
+            </div>
+            <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-text-primary">
+                    Daily Limit Reached
+                </h3>
+                <p className="text-text-secondary">
+                    You've used all your daily analyses for the <strong className="text-text-primary">{userTier || 'Free'}</strong> plan. Upgrade your plan to continue working.
+                </p>
+            </div>
+            <div className="flex flex-col gap-3 pt-2">
+                <motion.button
+                    onClick={onUpgrade}
+                    className="btn btn-primary w-full text-base py-3"
+                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                >
+                    <Zap size={16} /> Upgrade Plan
+                </motion.button>
+                <motion.button
+                    onClick={onClose}
+                    className="btn btn-secondary w-full"
+                    whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                >
+                    Maybe Later
+                </motion.button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
 
 const OnboardingIdleView = () => {
   const card1Ref = useRef<HTMLDivElement>(null);
@@ -1184,19 +1246,23 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   }, []);
 
   const fail = useCallback((err: string) => {
-    const isQuotaError = err?.includes?.("quota exceeded") || err?.includes?.("limit exceeded");
+    const isQuotaError = err?.includes?.("exceeded") || err?.includes?.("limit");
 
     if (isQuotaError) {
+      // It's a quota error, trigger the specific handlers
       if (!token) {
-        onGuestQuotaExceeded();
+        onGuestQuotaExceeded(); // This shows the Auth (Sign Up) page
       } else {
-        onUserQuotaExceeded();
+        onUserQuotaExceeded(); // This will show our new Quota Modal
       }
+      // Reset the main view to idle so the user isn't stuck on a loading screen
+      setView("idle");
     } else {
+      // It's a genuine error, show the error view
       setResult({ notice: `Error: ${err}` });
       setView("error");
+      setStatus("Analysis failed");
     }
-    setStatus("Analysis failed");
   }, [token, onGuestQuotaExceeded, onUserQuotaExceeded]);
   
   useJobPolling(jobId, token, success, fail, setStatus);
@@ -1692,11 +1758,12 @@ export default function Home() {
   const [showPricingPage, setShowPricingPage] = useState(false);
   const [showAuthPage, setShowAuthPage] = useState(false);
   const [isUpgradeMode, setIsUpgradeMode] = useState(false);
+  const [showQuotaModal, setShowQuotaModal] = useState(false);
 
   const handleEnterApp = () => setShowLandingPage(false);
   const handleNavigateToUpgrade = () => { setIsUpgradeMode(true); setPanelOpen(false); setShowPricingPage(true); };
   const handleGuestQuotaExceeded = () => setShowAuthPage(true);
-  const handleUserQuotaExceeded = () => handleNavigateToUpgrade();
+  const handleUserQuotaExceeded = () => setShowQuotaModal(true);
 
   const getTierBadgeText = (tier: string | null): string => {
     const tierLower = tier?.toLowerCase();
@@ -1990,6 +2057,19 @@ export default function Home() {
           </motion.div>
         )}
 
+        {/* ADD THIS BLOCK FOR THE NEW MODAL */}
+    {showQuotaModal && (
+      <QuotaExceededModal
+        isOpen={showQuotaModal}
+        userTier={getTierBadgeText(userTier)}
+        onClose={() => setShowQuotaModal(false)}
+        onUpgrade={() => {
+          setShowQuotaModal(false);
+          handleNavigateToUpgrade();
+        }}
+      />
+    )}
+
         {showPricingPage && (
        <motion.div key="pricing" className="modal-backdrop" {...scaleIn}>
           <PricingPage 
@@ -2005,6 +2085,8 @@ export default function Home() {
             <AuthComponent onAuthSuccess={() => setShowAuthPage(false)} />
           </motion.div>
         )}
+
+
       </AnimatePresence>
     </div>
   );
