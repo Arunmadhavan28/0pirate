@@ -251,7 +251,7 @@ export default function LandingPage({ onNavigate }: { onNavigate: () => void }) 
             <Mail className="w-5 h-5" />
             <span>support@0pirate.com</span>
           </a>
-          <a href="https://www.linkedin.com/company/0pirate" target="_blank" rel="noopener noreferrer" className="contact-popup-item">
+          <a href="https://www.linkedin.com/company/0pirateorg" target="_blank" rel="noopener noreferrer" className="contact-popup-item">
             <Linkedin className="w-5 h-5" />
             <span>LinkedIn Company Page</span>
           </a>
