@@ -1246,7 +1246,8 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   }, []);
 
   const fail = useCallback((err: string) => {
-    const isQuotaError = err?.includes?.("exceeded") || err?.includes?.("limit");
+    // This check is now broader and more robust.
+    const isQuotaError = err?.toLowerCase().includes("quota") || err?.toLowerCase().includes("limit");
 
     if (isQuotaError) {
       // It's a quota error, trigger the specific handlers
