@@ -667,23 +667,63 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
     const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
     const [editingKeyName, setEditingKeyName] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [actionToken, setActionToken] = useState<string | null>(null);
+    const [hasActionToken, setHasActionToken] = useState(false);
+    const [isGeneratingToken, setIsGeneratingToken] = useState(false);
+    const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
+    const [tokenCopied, setTokenCopied] = useState(false);
+
+    useEffect(() => {
+        const checkForToken = async () => {
+            if (!token) return;
+            try {
+                const { data, error } = await supabase.rpc('has_action_token');
+                if (error) throw error;
+                setHasActionToken(data);
+            } catch (e) {
+                console.error("Failed to check for action token:", e);
+            }
+        };
+        checkForToken();
+    }, [token]);
+
+    const handleGenerateToken = async () => {
+        if (!token) return;
+        setIsGeneratingToken(true);
+        setShowGenerateConfirm(false);
+        try {
+            const { data, error } = await supabase.rpc('generate_new_action_token');
+            if (error) throw error;
+            setActionToken(data);
+            setHasActionToken(true);
+        } catch (e: any) {
+            setMessage(`Error generating token: ${e.message}`);
+        } finally {
+            setIsGeneratingToken(false);
+        }
+    };
+
+    const handleCopyToken = () => {
+        if (!actionToken) return;
+        navigator.clipboard.writeText(actionToken).then(() => {
+            setTokenCopied(true);
+            setTimeout(() => setTokenCopied(false), 2000);
+        });
+    };
 
     const saveOrUpdateKey = async () => {
         if (!token || !apiKey) { 
             setMessage("Please provide a non-empty API key."); 
             return; 
         }
-        
         setIsLoading(true);
         const nameToSend = keyName.trim() || provider;
-        
         try {
             const res = await fetch(`${BACKEND_URL}/api/keys`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ provider, name: nameToSend, api_key: apiKey }),
             });
-            
             if (res.ok) {
                 setMessage(editingKeyName ? `✓ Updated key: ${nameToSend}` : `✓ Saved key: ${nameToSend}`);
                 resetForm();
@@ -702,14 +742,12 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
 
     const remove = async (nameToDelete: string) => {
         if (!token) return;
-        
         try {
             const res = await fetch(`${BACKEND_URL}/api/keys`, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ name: nameToDelete }),
             });
-            
             if (res.ok) { 
                 setMessage(`✓ Deleted key: ${nameToDelete}`); 
                 onKeysChange(); 
@@ -757,158 +795,102 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
                 initial="initial"
                 animate="animate"
             >
+                {/* Add/Edit Key Form */}
                 <div className="flex items-center gap-3">
                     <KeyRound size={24} className="text-accent-primary" />
                     <h3 className="text-2xl font-semibold">
                         {editingKeyName ? `Edit '${editingKeyName}'` : "Add New API Key"}
                     </h3>
                 </div>
-                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-text-secondary">Key Name (Optional)</label>
-                        <input 
-                            className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                            type="text" 
-                            placeholder="e.g., Personal Gemini Key" 
-                            value={keyName} 
-                            onChange={(e) => setKeyName(e.target.value)} 
-                            disabled={!!editingKeyName} 
-                        />
+                        <input className="input-base" type="text" placeholder="e.g., Personal Gemini Key" value={keyName} onChange={(e) => setKeyName(e.target.value)} disabled={!!editingKeyName} />
                     </div>
-                    
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-text-secondary">Provider</label>
-                        <select 
-                            className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                            value={provider} 
-                            onChange={(e) => setProvider(e.target.value)} 
-                            disabled={!!editingKeyName}
-                        >
-                            {Object.keys(MODEL_OPTIONS).filter((p) => !["auto", "ollama"].includes(p)).map((p) => 
-                                <option key={p} value={p} className="capitalize">{p}</option>
-                            )}
+                        <select className="input-base" value={provider} onChange={(e) => setProvider(e.target.value)} disabled={!!editingKeyName}>
+                            {Object.keys(MODEL_OPTIONS).filter((p) => !["auto", "ollama"].includes(p)).map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}
                         </select>
                     </div>
                 </div>
-                
                 <div className="space-y-2">
                     <label className="text-sm font-medium text-text-secondary">API Key</label>
-                    <input 
-                        className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                        type="password" 
-                        placeholder={editingKeyName ? "Enter new key to update" : "Paste your API key here"} 
-                        value={apiKey} 
-                        onChange={(e) => setApiKey(e.target.value)} 
-                    />
+                    <input className="input-base" type="password" placeholder={editingKeyName ? "Enter new key to update" : "Paste your API key here"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
                 </div>
-                
                 <div className="flex gap-3 pt-2">
-                    {editingKeyName && (
-                        <motion.button 
-                            onClick={resetForm} 
-                            className="btn btn-secondary flex-1"
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                        >
-                            Cancel Edit
-                        </motion.button>
-                    )}
-                    <motion.button 
-                        onClick={saveOrUpdateKey} 
-                        disabled={isLoading}
-                        className="btn btn-primary flex-1"
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                    >
-                        {isLoading ? (
-                            <div className="flex items-center gap-2">
-                                <LoadingSpinner size={14} />
-                                Saving...
-                            </div>
-                        ) : (
-                            editingKeyName ? "Update Key" : "Save Key"
-                        )}
+                    {editingKeyName && <motion.button onClick={resetForm} className="btn btn-secondary flex-1">Cancel Edit</motion.button>}
+                    <motion.button onClick={saveOrUpdateKey} disabled={isLoading} className="btn btn-primary flex-1">
+                        {isLoading ? <><LoadingSpinner size={14} /> Saving...</> : (editingKeyName ? "Update Key" : "Save Key")}
                     </motion.button>
                 </div>
-                
                 <AnimatePresence>
                     {message && (
-                        <motion.div
-                            className={`text-center p-3 rounded-lg border ${
-                                message.startsWith('✓') 
-                                    ? 'bg-green-500/10 border-green-500/20 text-green-400' 
-                                    : 'bg-red-500/10 border-red-500/20 text-red-400'
-                            }`}
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: "auto" }}
-                            exit={{ opacity: 0, height: 0 }}
-                        >
+                        <motion.div className={`text-center p-3 rounded-lg border ${message.startsWith('✓') ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}>
                             <p className="text-sm">{message}</p>
                         </motion.div>
                     )}
                 </AnimatePresence>
             </motion.div>
 
-            <motion.div 
-    className="space-y-2"
-    variants={fadeInUp}
-    initial="initial"
-    animate="animate"
-    transition={{ delay: 0.1 }}
->
-    <div className="flex items-center gap-3 mb-4">
-        <Settings size={24} className="text-accent-primary" />
-        <h3 className="text-2xl font-semibold">Saved Keys</h3>
-        {savedKeys.length > 0 && (<Badge tone="info">{savedKeys.length} keys</Badge>)}
-    </div>
-    
-    {savedKeys.length > 0 ? (
-        <div className="flex flex-col">
-            {savedKeys.map((key, index) => (
-                <motion.div 
-                    key={key.name} 
-                    className="settings-row py-4 border-b border-border-primary last:border-b-0"
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="w-2 h-2 bg-accent-primary rounded-full"></div>
-                        <div>
-                            <p className="font-mono text-sm font-medium text-text-primary">{key.name}</p>
-                            <p className="text-xs text-text-secondary capitalize">Provider: {key.provider}</p>
+            {/* Saved Keys List */}
+            <motion.div className="space-y-2" variants={fadeInUp} initial="initial" animate="animate" transition={{ delay: 0.1 }}>
+                <div className="flex items-center gap-3 mb-4">
+                    <Settings size={24} className="text-accent-primary" />
+                    <h3 className="text-2xl font-semibold">Saved Keys</h3>
+                    {savedKeys.length > 0 && (<Badge tone="info">{savedKeys.length} keys</Badge>)}
+                </div>
+                {savedKeys.length > 0 ? (
+                    <div className="flex flex-col">
+                        {savedKeys.map((key, index) => (
+                            <motion.div key={key.name} className="settings-row py-4 border-b border-border-primary last:border-b-0" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.05 }}>
+                                <div className="flex items-center gap-3"><div className="w-2 h-2 bg-accent-primary rounded-full"></div><div><p className="font-mono text-sm font-medium text-text-primary">{key.name}</p><p className="text-xs text-text-secondary capitalize">Provider: {key.provider}</p></div></div>
+                                <div className="flex gap-2"><motion.button onClick={() => handleEditClick(key)} className="btn btn-secondary text-sm px-3 py-1.5"><Edit size={14}/> Edit</motion.button><motion.button onClick={() => handleDeleteClick(key.name)} className="btn btn-destructive text-sm px-3 py-1.5"><Trash2 size={14}/> Delete</motion.button></div>
+                            </motion.div>
+                        ))}
+                    </div>
+                ) : (
+                    <motion.div className="text-center py-12 px-6 border border-dashed border-border-primary rounded-xl" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <KeyRound size={48} className="mx-auto text-text-secondary mb-4" /><p className="text-text-secondary text-lg mb-2">No API keys saved yet</p><p className="text-text-secondary/70 text-sm">Add your first API key to get started...</p>
+                    </motion.div>
+                )}
+            </motion.div>
+
+            {/* GitHub Action Integration Section */}
+            <motion.div className="space-y-4" variants={fadeInUp} initial="initial" animate="animate" transition={{ delay: 0.2 }}>
+                <div className="flex items-center gap-3 mb-4">
+                    <Github size={24} className="text-accent-primary" />
+                    <h3 className="text-2xl font-semibold">GitHub Action Integration</h3>
+                </div>
+                <div className="card p-6 space-y-4">
+                    <p className="text-text-secondary">Generate a secure token to authenticate the 0pirate GitHub Action with your account.</p>
+                    {actionToken ? (
+                        <div className="space-y-4">
+                            <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg text-green-300 text-sm"><strong>Important:</strong> Copy this token now. You will not be able to see it again.</div>
+                            <div className="bg-background-light p-4 rounded-lg border border-border-primary flex items-center justify-between gap-4">
+                                <pre className="text-sm text-text-primary overflow-x-auto font-mono">{actionToken}</pre>
+                                <button onClick={handleCopyToken} className="btn btn-secondary text-sm px-3 py-1.5 flex-shrink-0">
+                                    {tokenCopied ? <ClipboardCheck size={14} className="text-green-400" /> : <Clipboard size={14} />} {tokenCopied ? "Copied!" : "Copy"}
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                    <div className="flex gap-2">
-                        <motion.button onClick={() => handleEditClick(key)} className="btn btn-secondary text-sm px-3 py-1.5"><Edit size={14}/> Edit</motion.button>
-                        <motion.button onClick={() => handleDeleteClick(key.name)} className="btn btn-destructive text-sm px-3 py-1.5"><Trash2 size={14}/> Delete</motion.button>
-                    </div>
-                </motion.div>
-            ))}
-        </div>
-    ) : (
-        <motion.div 
-            className="text-center py-12 px-6 border border-dashed border-border-primary rounded-xl"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-        >
-            <KeyRound size={48} className="mx-auto text-text-secondary mb-4" />
-            <p className="text-text-secondary text-lg mb-2">No API keys saved yet</p>
-            <p className="text-text-secondary/70 text-sm">Add your first API key to get started with AI-powered code analysis</p>
-        </motion.div>
-    )}
-</motion.div>
+                    ) : (
+                        <div className="flex items-center justify-between">
+                            {hasActionToken ? (<p className="text-sm text-green-400 flex items-center gap-2"><ShieldCheck size={16} /> An Action Token is configured.</p>) : (<p className="text-sm text-text-secondary">No token generated yet.</p>)}
+                            <motion.button onClick={() => setShowGenerateConfirm(true)} disabled={isGeneratingToken} className="btn btn-primary">
+                                {isGeneratingToken ? <><LoadingSpinner size={14} /> Generating...</> : (hasActionToken ? 'Generate New Token' : 'Generate Token')}
+                            </motion.button>
+                        </div>
+                    )}
+                </div>
+            </motion.div>
             
-            <ConfirmationModal
-                isOpen={isConfirmModalOpen}
-                onClose={() => setConfirmModalOpen(false)}
-                onConfirm={handleConfirmDelete}
-                title="Delete API Key"
-                promptText={keyToDelete || ""}
-                confirmLabel="Delete Key"
-            >
-                <p>This action cannot be undone. This will permanently delete the <strong className="text-red-400">{keyToDelete}</strong> API key from your account.</p>
+            <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setConfirmModalOpen(false)} onConfirm={handleConfirmDelete} title="Delete API Key" promptText={keyToDelete || ""} confirmLabel="Delete Key">
+                <p>This action will permanently delete the <strong className="text-red-400">{keyToDelete}</strong> API key.</p>
+            </ConfirmationModal>
+
+            <ConfirmationModal isOpen={showGenerateConfirm} onClose={() => setShowGenerateConfirm(false)} onConfirm={handleGenerateToken} title="Generate New Action Token" promptText="generate" confirmLabel="Generate">
+                {hasActionToken ? (<p>This will invalidate your existing token. Confirm by typing "<strong className="text-amber-400">generate</strong>" below.</p>) : (<p>This will create a new token. Confirm by typing "<strong className="text-amber-400">generate</strong>" below.</p>)}
             </ConfirmationModal>
         </div>
     );
@@ -1148,6 +1130,52 @@ function ToggleSwitch({
 }
 
 
+function restoreFromMaps(
+    abstractedCode: Record<string, string>,
+    secretMaps: Record<string, Record<string, string>>,
+    abstractionMaps: Record<string, Record<string, string>>
+): Record<string, string> {
+    const restoredFiles: Record<string, string> = {};
+
+    for (const path in abstractedCode) {
+        let content = abstractedCode[path];
+        
+        // --- THIS IS THE CORRECTED LOGIC ---
+        const reverseMap: Record<string, string> = {};
+
+        // 1. Process abstraction_maps (structure: original -> placeholder)
+        const abstractionMapForFile = abstractionMaps[path] || {};
+        for (const original in abstractionMapForFile) {
+            const placeholder = abstractionMapForFile[original];
+            reverseMap[placeholder] = original;
+        }
+
+        // 2. Process secret_maps (structure: placeholder -> original)
+        const secretMapForFile = secretMaps[path] || {};
+        for (const placeholder in secretMapForFile) {
+            const original = secretMapForFile[placeholder];
+            reverseMap[placeholder] = original;
+        }
+        // --- END OF CORRECTION ---
+
+        // Sort placeholders by length, descending, to prevent partial replacements.
+        const sortedPlaceholders = Object.keys(reverseMap).sort((a, b) => b.length - a.length);
+
+        for (const placeholder of sortedPlaceholders) {
+            const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            content = content.replace(new RegExp(escapedPlaceholder, 'g'), reverseMap[placeholder]);
+        }
+        
+        restoredFiles[path] = content;
+    }
+
+    return restoredFiles;
+}
+
+type RestorationMaps = {
+  secret_maps: Record<string, Record<string, string>>;
+  abstraction_maps: Record<string, Record<string, string>>;
+};
 
 function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }: {
   token: string | null;
@@ -1174,6 +1202,9 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   const [inputMode, setInputMode] = useState<'paste' | 'upload'>('paste');
   const [files, setFiles] = useState<File[]>([]);
   const [showOllamaHelp, setShowOllamaHelp] = useState(false);
+  const [allowList, setAllowList] = useState("");
+  const [restorationMaps, setRestorationMaps] = useState<RestorationMaps | null>(null);
+
 
   const getLanguageFromFileName = (filename: string | null): string => {
     if (!filename) return 'plaintext';
@@ -1225,25 +1256,43 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
 
   const success = useCallback((d: any) => {
-    let resultData = d.result || {};
-    let firstFileName = null;
-    if (typeof resultData === 'string') {
-      try { resultData = JSON.parse(resultData); } 
+    let resultDataAbstracted = d.result || {};
+    
+    // Attempt to parse the result if it's a string, as before
+    if (typeof resultDataAbstracted === 'string') {
+      try { resultDataAbstracted = JSON.parse(resultDataAbstracted); } 
       catch (e) {
         console.error("Failed to parse result JSON:", e);
-        setResult({ ...d, result: { notice: resultData } });
+        setResult({ ...d, result: { notice: resultDataAbstracted } });
         setView("result");
         return;
       }
     }
-    if (typeof resultData === 'object' && Object.keys(resultData).length > 0) {
-      firstFileName = Object.keys(resultData)[0];
+
+    // This is the critical new logic:
+    if (restorationMaps) {
+        // If we have maps, perform the client-side restoration
+        const restoredResult = restoreFromMaps(
+            resultDataAbstracted as Record<string, string>,
+            restorationMaps.secret_maps,
+            restorationMaps.abstraction_maps
+        );
+        
+        let firstFileName = Object.keys(restoredResult).length > 0 ? Object.keys(restoredResult)[0] : null;
+
+        setResult({ ...d, result: restoredResult });
+        setActiveFile(firstFileName);
+    } else {
+        // Fallback for flows that don't use restoration (like Ollama)
+        const firstFileName = Object.keys(resultDataAbstracted).length > 0 ? Object.keys(resultDataAbstracted)[0] : null;
+        setResult({ ...d, result: resultDataAbstracted });
+        setActiveFile(firstFileName);
     }
-    setResult({ ...d, result: resultData });
-    setActiveFile(firstFileName);
+    
     setView("result");
     setStatus("Analysis completed successfully");
-  }, []);
+    setRestorationMaps(null); // Securely clear the sensitive maps from state after use
+  }, [restorationMaps]); // Add restorationMaps to the dependency array
 
   const fail = useCallback((err: string) => {
     // This check is now broader and more robust.
@@ -1274,15 +1323,42 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
       setSelectedKeyName(keysForProvider.length > 0 ? keysForProvider[0].name : "");
     }
   }, [provider, savedKeys]);
-  
+
+async function createTamperEvidentHash(files: File[], pastedCode: string): Promise<string> {
+    // We'll hash either the uploaded files or the pasted code
+    let combinedContent = "";
+    
+    if (files.length > 0) {
+        // To ensure consistency, sort files by name before concatenating
+        const sortedFiles = [...files].sort((a, b) => a.name.localeCompare(b.name));
+        for (const file of sortedFiles) {
+            combinedContent += await file.text();
+        }
+    } else {
+        combinedContent = pastedCode;
+    }
+
+    const encoder = new TextEncoder();
+    const data = encoder.encode(combinedContent);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    
+    // Convert buffer to hex string
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return hashHex;
+}
+
+   
   const submit = async () => {
     if (!pastedCode.trim() && files.length === 0) return fail("Please paste or upload your code.");
   
     setView("loading");
     setResult(null);
     setJobId(null);
+    setRestorationMaps(null); // Clear previous maps
     setStatus("Submitting analysis request...");
 
+    // OLLAMA (Local LLM) flow remains the same, as it doesn't need the secure redactor.
     if (provider === 'ollama') {
       try {
         setStatus("Connecting to local LLM...");
@@ -1320,27 +1396,82 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
       if (!token && !guestApiKey.trim()) return fail(`Please provide an API key for '${provider}' to continue.`);
     }
     
-    const fd = new FormData();
-    if (files.length > 0) files.forEach(file => fd.append("files", file, file.name));
-    else fd.append("files", new Blob([pastedCode]), "pasted_code.py");
-    fd.append("task", task);
-    if (errorLog) fd.append("error_log", errorLog);
-    fd.append("provider", provider);
-    if (model) fd.append("model", model);
-    if (token && selectedKeyName) fd.append("api_key_name", selectedKeyName);
-    else if (!token && guestApiKey) fd.append("api_key", guestApiKey);
-    fd.append("token_saver_enabled", String(tokenSaver));
-    fd.append("abstraction_enabled", String(maxSecurity));
-    fd.append("abstraction_level", maxSecurity ? "paranoid" : "standard");
-    
     try {
-      const headers: HeadersInit = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`${BACKEND_URL}/api/process_code`, { method: "POST", headers, body: fd });
-      const d = await res.json();
-      if (res.ok) { setJobId(d.job_id); setStatus("Job submitted, processing..."); }
-      else fail(d.detail || "Submission failed.");
-    } catch (e: any) { fail(e.message || "A network error occurred."); }
+        // --- STEP 1: Call /api/redact endpoint ---
+        setStatus("Securing code (client-side redaction)...");
+        const redactionFormData = new FormData();
+        if (files.length > 0) {
+            files.forEach(file => redactionFormData.append("files", file, file.name));
+        } else {
+            redactionFormData.append("files", new Blob([pastedCode]), "pasted_code.py");
+        }
+
+        if (allowList.trim()) {
+            const allowListArray = allowList.split(',').map(item => item.trim()).filter(Boolean);
+            redactionFormData.append("allow_list_json", JSON.stringify(allowListArray));
+        }
+
+        const redactRes = await fetch(`${BACKEND_URL}/api/redact`, {
+            method: "POST",
+            body: redactionFormData,
+        });
+
+        if (!redactRes.ok) {
+            const err = await redactRes.json();
+            throw new Error(`Redaction failed: ${err.detail || 'Server error'}`);
+        }
+
+        const redactionData = await redactRes.json();
+        const { abstracted_files, secret_maps, abstraction_maps } = redactionData;
+
+        setRestorationMaps({ secret_maps, abstraction_maps });
+
+        // --- STEP 2: Call /api/process_code with ABSTRACTED code ---
+        setStatus("Submitting analysis request...");
+        const mainFormData = new FormData();
+        
+        const abstractedFileEntries = Object.entries(abstracted_files);
+        for (const [path, content] of abstractedFileEntries) {
+            mainFormData.append("files", new Blob([content as string]), path);
+        }
+
+        // --- Update the tamper-evident hash to use the abstracted code ---
+        const abstractedContentString = abstractedFileEntries.sort((a,b) => a[0].localeCompare(b[0])).map(entry => entry[1]).join('');
+        const encoder = new TextEncoder();
+        const data = encoder.encode(abstractedContentString);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        mainFormData.append("tamper_evident_hash", hashHex);
+        
+        mainFormData.append("task", task);
+        if (errorLog) mainFormData.append("error_log", errorLog);
+        mainFormData.append("provider", provider);
+        if (model) mainFormData.append("model", model);
+        if (token && selectedKeyName) mainFormData.append("api_key_name", selectedKeyName);
+        else if (!token && guestApiKey) mainFormData.append("api_key", guestApiKey);
+        mainFormData.append("token_saver_enabled", String(tokenSaver));
+        
+        const headers: HeadersInit = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        
+        const mainRes = await fetch(`${BACKEND_URL}/api/process_code`, {
+            method: "POST",
+            headers,
+            body: mainFormData,
+        });
+
+        const d = await mainRes.json();
+        if (mainRes.ok) { 
+            setJobId(d.job_id); 
+            setStatus("Job submitted, processing..."); 
+        } else {
+            fail(d.detail || "Submission failed.");
+        }
+
+    } catch (e: any) {
+        fail(e.message || "A network error occurred.");
+    }
   };
 
   const copy = (textToCopy?: string) => {
@@ -1568,6 +1699,24 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
                  onChange={setTokenSaver} 
                  icon={Zap} 
                />
+
+               {/* --- ADD THIS NEW BLOCK FOR THE ALLOW LIST --- */}
+                <div className="space-y-3 pt-4 border-t border-border-secondary">
+                    <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
+                        <Edit size={16} />
+                        Granular Controls (Optional)
+                    </label>
+                    <textarea
+                        className="input-base w-full transition-all duration-200 focus:ring-2 focus:ring-blue-500/30 font-mono text-xs"
+                        placeholder="Enter comma-separated words to keep (e.g., myApi, calculateTotal, React)"
+                        value={allowList}
+                        onChange={(e) => setAllowList(e.target.value)}
+                        rows={2}
+                    />
+                    <p className="text-xs text-text-secondary">
+                        Identifiers listed here will not be abstracted. Useful for preserving public function names or specific library keywords.
+                    </p>
+                </div>
             </motion.div>
           </motion.div>
         </div>
@@ -1890,12 +2039,13 @@ export default function Home() {
   }, []);
 
   useEffect(() => { if (token) { loadKeys(); } }, [token, loadKeys]);
-  useEffect(() => {
+   useEffect(() => {
     const handleAuthChange = async (session: any) => {
       setUser(session?.user ?? null);
       setToken(session?.access_token ?? null);
       if (session?.user) { 
         await loadUserProfile(session.user.id); 
+        setShowLandingPage(false); // <-- ADD THIS LINE
       } else { 
         setUserTier(null); 
       }

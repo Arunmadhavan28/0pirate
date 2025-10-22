@@ -104,10 +104,11 @@ def detect_language(code: str, filename_hint: Optional[str] = None) -> str:
 # Python AST Abstractor
 # -------------------------------
 class PythonAbstractor(ast.NodeTransformer):
-    def __init__(self, level: str = "basic", salt: Optional[str] = None, noise: bool = True):
+    def __init__(self, level: str = "basic", salt: Optional[str] = None, noise: bool = True, allow_list: Optional[Set[str]] = None):
         self.mapping: Dict[str, str] = {}
         self.reverse: Dict[str, str] = {}
-        self.ignore_names = set(dir(builtins)) | {"self", "cls"}
+        # This is the key change: we merge the user's list with the built-in ignores.
+        self.ignore_names = set(dir(builtins)) | {"self", "cls"} | (allow_list or set())
         self.level = level
         self.salt = salt
         self.noise = noise
@@ -182,7 +183,7 @@ def regex_abstract(code: str, level: str = "basic", salt: Optional[str] = None) 
 # -------------------------------
 # Registry & Orchestration
 # -------------------------------
-def _python_wrapper(code: str, level: str, salt: Optional[str], noise: bool, chunking: bool) -> Tuple[str, Dict[str, str]]:
+def _python_wrapper(code: str, level: str, salt: Optional[str], noise: bool, chunking: bool, allow_list: Optional[Set[str]] = None) -> Tuple[str, Dict[str, str]]:
     """Orchestrates abstraction for Python, handling chunking, noise, and fallbacks."""
     try:
         tree = ast.parse(code)
@@ -194,7 +195,8 @@ def _python_wrapper(code: str, level: str, salt: Optional[str], noise: bool, chu
         global_mapping: Dict[str, str] = {}
         for node in tree.body:
             block_ast = ast.Module(body=[node], type_ignores=[])
-            transformer = PythonAbstractor(salt=salt)
+            # Pass the allow_list to the transformer
+            transformer = PythonAbstractor(salt=salt, allow_list=allow_list)
             transformed_chunk = transformer.visit(block_ast)
             abstracted_code_chunk = ast.unparse(transformed_chunk)
             chunk_scrubbed, comment_map = regex_abstract(abstracted_code_chunk, salt=salt)
@@ -204,7 +206,8 @@ def _python_wrapper(code: str, level: str, salt: Optional[str], noise: bool, chu
         abstracted_code = "\n\n".join(abstracted_blocks)
         mapping = global_mapping
     else:
-        transformer = PythonAbstractor(salt=salt)
+        # Pass the allow_list to the transformer
+        transformer = PythonAbstractor(salt=salt, allow_list=allow_list)
         transformed_tree = transformer.visit(tree)
         abstracted_code = ast.unparse(transformed_tree)
         abstracted_code, comment_map = regex_abstract(abstracted_code, salt=salt)
@@ -237,14 +240,18 @@ REGISTRY: Dict[str, Callable] = {
 # -------------------------------
 def abstract_single_file_text(
     code: str, filename_hint: Optional[str] = None, level: str = "basic", 
-    salt: Optional[str] = None, noise: bool = True, chunking: bool = False
+    salt: Optional[str] = None, noise: bool = True, chunking: bool = False,
+    # --- ADD THE NEW PARAMETER ---
+    allow_list: Optional[Set[str]] = None
 ) -> Tuple[str, Dict[str, str]]:
     lang = detect_language(code, filename_hint=filename_hint)
     abstractor = REGISTRY.get(lang, REGISTRY["unknown"])
     try:
         if lang == "python":
-            return abstractor(code, level, salt, noise, chunking)
+            # Pass the allow_list down to the python wrapper
+            return abstractor(code, level, salt, noise, chunking, allow_list=allow_list)
         else:
+            # Regex abstractor does not currently use an allow list, but could be modified in the future
             return abstractor(code, salt=salt)
     except Exception as e:
         if METRICS_ENABLED: MET_ERRORS.inc()

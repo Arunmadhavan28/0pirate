@@ -12,6 +12,9 @@ import json
 import razorpay
 from fastapi import Header
 from typing import Annotated
+import hashlib 
+import subprocess
+from src.client_redactor import run_redaction
 
 from fastapi import FastAPI, Request, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -215,6 +218,9 @@ async def save_api_key(req: Request, body: ApiKeyRequest, user: dict = Depends(g
     except Exception as e:
         logger.error(f"Failed to save API key for user {user_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to save key.")
+    
+
+
 
 @app.delete("/api/keys")
 async def delete_api_key(req: Request, body: ApiKeyDeleteRequest, user: dict = Depends(get_current_user)):
@@ -238,7 +244,50 @@ async def get_user_keys(user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Could not retrieve keys for user {user_id}: {str(e)}", exc_info=True)
         return JSONResponse({"keys": []})
-    
+
+@app.post("/api/redact")
+async def api_redact_code(
+    files: List[UploadFile] = File(...),
+    allow_list_json: Optional[str] = Form(None) # <-- FIX 1: Accept allow_list
+):
+    """
+    A stateless endpoint that only performs redaction and abstraction.
+    It returns the abstracted code and the maps to the client, storing nothing.
+    """
+    project_files: Dict[str, str] = {}
+    for file in files:
+        contents = await file.read()
+        if file.filename:
+            project_files[file.filename] = contents.decode("utf-8", errors="ignore")
+
+    if not project_files:
+        raise HTTPException(status_code=400, detail="No files provided for redaction.")
+
+    # --- FIX 2: Parse the allow_list from the form data ---
+    allow_list: Optional[List[str]] = None
+    if allow_list_json:
+        try:
+            allow_list = json.loads(allow_list_json)
+            if not isinstance(allow_list, list):
+                allow_list = None
+        except json.JSONDecodeError:
+            logger.warning("Invalid allow_list_json received, ignoring.")
+            allow_list = None
+    # --- End of FIX 2 ---
+
+    try:
+        # Use asyncio.to_thread to run the synchronous redaction logic without blocking
+        # --- FIX 3: Pass the allow_list to the function ---
+        redaction_result = await asyncio.to_thread(
+            run_redaction, 
+            project_files=project_files, 
+            allow_list=allow_list
+        )
+        return JSONResponse(content=redaction_result)
+    except Exception as e:
+        logger.error(f"Redaction failed: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"An error occurred during redaction: {e}")
+
 @app.get("/api/plans")
 async def get_plans(req: Request):
     country = req.headers.get("x-vercel-ip-country")
@@ -381,6 +430,7 @@ class ProcessRequestForm:
         token_saver_enabled: Optional[bool] = Form(False),
         abstraction_enabled: Optional[bool] = Form(True),
         abstraction_level: Optional[str] = Form("paranoid"),
+        tamper_evident_hash: str = Form(...)
     ):
         self.task = task
         self.provider = provider
@@ -392,13 +442,62 @@ class ProcessRequestForm:
         self.abstraction_enabled = abstraction_enabled
         self.abstraction_level = abstraction_level
 
+# [ADD THIS NEW DEPENDENCY FUNCTION at line 133, after get_user_tier]
+async def get_authenticated_user(req: Request) -> dict:
+    """
+    Authenticates a user via Supabase JWT (for web app) or a long-lived
+    action token (for GitHub Action).
+    """
+    # Try Supabase JWT first
+    user = await get_optional_current_user(req)
+    if user:
+        return user
+
+    # Fallback to Action Token
+    action_token = req.headers.get("X-0Pirate-Action-Token")
+    if not action_token:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    
+    try:
+        # Assumes an RPC function `get_user_by_action_token` exists in Supabase
+        # that securely validates the token and returns the user's profile.
+        user_resp = supabase.rpc("get_user_by_action_token", {"p_token": action_token}).execute()
+        if user_resp.data:
+            return user_resp.data
+        else:
+            raise HTTPException(status_code=401, detail="Invalid or expired action token.")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired action token.")
+
+
 @app.post("/api/process_code")
 async def api_process_code(
     req: Request,
     files: List[UploadFile] = File(...),
     form_data: ProcessRequestForm = Depends(),
-    user: Optional[dict] = Depends(get_optional_current_user)
+    # --- FIX: Use the new, flexible authentication dependency ---
+    user: Optional[dict] = Depends(get_authenticated_user)
 ):
+    # --- NEW: Verification Logic at the beginning ---
+    # This part remains unchanged.
+    combined_content = ""
+    # Sort files by filename to match the client-side hashing order
+    sorted_files = sorted(files, key=lambda f: f.filename or "")
+    for file in sorted_files:
+        contents = await file.read()
+        # It's important to seek back to the start for later processing
+        await file.seek(0) 
+        combined_content += contents.decode("utf-8", errors="ignore")
+
+    # Calculate the hash on the server
+    server_hash = hashlib.sha256(combined_content.encode("utf-8")).hexdigest()
+
+    # Compare with the hash sent from the client
+    if server_hash != form_data.tamper_evident_hash:
+        raise HTTPException(status_code=400, detail="Data integrity check failed. The request may have been tampered with.")
+    # --- END NEW ---
+
+
     user_id = None
     ip_address = None
     api_key = form_data.api_key
@@ -508,23 +607,28 @@ async def process_job_background(job_id: str, payload: dict):
 
     try:
         response = await call_llm_and_process(payload)
-        job_update = {
+        # 1. Update the full result in the temporary IN-MEMORY store for the user to fetch.
+        full_result_update = {
             "status": "completed" if response.get("success") else "failed",
             "result": response.get("result"),
             "notice": response.get("notice"),
             "analysis": response.get("analysis"),
-            "validator_report": response.get("validator_report"),
             "sandbox_result": response.get("sandbox_result"),
         }
-    except Exception as e:
-        job_update = {
-            "status": "failed",
-            "result": None,
-            "notice": f"Internal error: {str(e)}",
+        JOB_STORE[job_id].update(full_result_update)
+
+        # 2. Create a separate, REDACTED dictionary for the PERMANENT database record.
+        db_update = {
+            "status": full_result_update["status"],
+            "notice": full_result_update["notice"],
+            # DO NOT include "result" or "analysis".
         }
+
+    except Exception as e:
+        db_update = {"status": "failed", "notice": f"Internal error: {str(e)}"}
     
-    JOB_STORE[job_id].update(job_update)
-    supabase.table("jobs").update(job_update).eq("job_id", job_id).execute()
+    # 3. Only save the non-sensitive metadata to Supabase.
+    supabase.table("jobs").update(db_update).eq("job_id", job_id).execute()
 
 @app.get("/api/status/{job_id}")
 async def get_job_status(req: Request, job_id: str, user: Optional[dict] = Depends(get_optional_current_user)):

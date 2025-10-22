@@ -11,6 +11,8 @@ RUN pip list | grep -E "(uvicorn|razorpay|fastapi)" || echo "Some packages missi
 RUN python -c "import uvicorn; print('uvicorn OK')" || echo "uvicorn failed"
 RUN python -c "import razorpay; print('razorpay OK')" || echo "razorpay failed"
 
+COPY seccomp_profile.json /app/seccomp_profile.json
+
 # Copy app
 COPY . .
 

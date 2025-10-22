@@ -392,6 +392,15 @@ def run_tests_in_sandbox(
 
         # Run container detached for polling
         try:
+            # Assumes seccomp_profile.json is in the project root next to your Dockerfile
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            seccomp_path = os.path.join(script_dir, '..', 'seccomp_profile.json')
+            
+            seccomp_profile = None
+            if os.path.exists(seccomp_path):
+                with open(seccomp_path, "r") as f:
+                    seccomp_profile = json.load(f)
+
             container = client.containers.run(
                 image=chosen_image,
                 command=docker_command,
@@ -405,6 +414,10 @@ def run_tests_in_sandbox(
                 stderr=True,
                 mem_limit=MEMORY_LIMIT,
                 cpu_shares=CPU_SHARES,
+                # --- NEW: Hardening Options ---
+                cap_drop=["ALL"],  # Drop all Linux capabilities
+                security_opt=[f"seccomp={json.dumps(seccomp_profile)}" if seccomp_profile else "seccomp=unconfined"]
+                # --- END NEW ---
             )
         except Exception as e:
             logger.exception("Failed to create container")
@@ -936,6 +949,7 @@ def run_with_concurrency_analysis(
     analyzer = AdvancedConcurrencyAnalyzer()
     def docker_execute():
         return run_tests_in_sandbox(code, tests, language, timeout_seconds=timeout_seconds, image=image)
+    # --- THIS IS THE CORRECT LOGIC TO RESTORE ---
     try:
         analysis = analyzer.analyze_concurrency(code, docker_execute, allow_local_execution=allow_local_execution)
         result = analysis.get("execution_result") or {
@@ -958,6 +972,7 @@ def run_with_concurrency_analysis(
         logger.exception("Concurrency analysis runner failed")
         telemetry_event("run_with_concurrency_analysis.error", {"exception": str(e)})
         return docker_execute()
+    # --- END OF CORRECT LOGIC ---
 
 # -----------------------
 # Minimal CLI for quick testing
@@ -1051,6 +1066,16 @@ def run_command_in_sandbox(
             logger.info("Pulling Docker image: %s", image)
             client.images.pull(image)
 
+        # --- REPLACE THE EXISTING client.containers.run CALL WITH THIS BLOCK ---
+        # Assumes seccomp_profile.json is in the project root next to your Dockerfile
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        seccomp_path = os.path.join(script_dir, '..', 'seccomp_profile.json')
+        
+        seccomp_profile = None
+        if os.path.exists(seccomp_path):
+            with open(seccomp_path, "r") as f:
+                seccomp_profile = json.load(f)
+
         container = client.containers.run(
             image=image,
             command=command,
@@ -1060,6 +1085,10 @@ def run_command_in_sandbox(
             network_disabled=DISABLE_NETWORK,
             mem_limit=MEMORY_LIMIT,
             cpu_shares=CPU_SHARES,
+            # --- NEW: Hardening Options ---
+            cap_drop=["ALL"], # Drop all Linux capabilities
+            security_opt=[f"seccomp={json.dumps(seccomp_profile)}" if seccomp_profile else "seccomp=unconfined"]
+            # --- END NEW ---
         )
 
         # Poll for completion with timeout
