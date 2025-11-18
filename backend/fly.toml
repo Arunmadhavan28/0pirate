@@ -3,49 +3,32 @@ primary_region = 'bom'
 
 [build]
 
+# The Modern "Production" Service Block
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = false # <-- Keep the machine on
+  auto_stop_machines = false # Keeps server warm for fast response
   auto_start_machines = true
-  min_machines_running = 1   # <-- Ensure at least one machine is always running
+  min_machines_running = 1
   processes = ['app']
 
-[http_service.http_options.response.headers]
-  Access-Control-Allow-Origin = "https://0pirate.com"
-  Access-Control-Allow-Methods = "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT"
-  Access-Control-Allow-Headers = "content-type, authorization"
-  Access-Control-Allow-Credentials = "true"
-  Access-Control-Max-Age = "600"
+  # Production Safety: Check /health every 15s to ensure app is alive
+  [[http_service.checks]]
+    grace_period = "50s"
+    interval = "15s"
+    method = "GET"
+    timeout = "2s"
+    path = "/health"
+
+  # Edge Configuration: Handles CORS before it even hits your Python code
+  [http_service.http_options.response.headers]
+    Access-Control-Allow-Origin = "https://0pirate.com"
+    Access-Control-Allow-Methods = "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT"
+    Access-Control-Allow-Headers = "content-type, authorization"
+    Access-Control-Allow-Credentials = "true"
+    Access-Control-Max-Age = "600"
 
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
-
-[[services]]
-  http_checks = []
-  internal_port = 8080
-  processes = ["app"]
-  protocol = "tcp"
-  script_checks = []
-  [services.concurrency]
-    hard_limit = 25
-    soft_limit = 20
-    type = "connections"
-
-  [[services.ports]]
-    force_https = true
-    handlers = ["http"]
-    port = 80
-
-  [[services.ports]]
-    force_https = true
-    handlers = ["tls", "http"]
-    port = 443
-
-  [[services.tcp_checks]]
-    grace_period = "1s"
-    interval = "15s"
-    restart_limit = 0
-    timeout = "2s"

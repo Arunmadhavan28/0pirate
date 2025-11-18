@@ -127,7 +127,7 @@ def get_country_code(req: Request) -> str:
     # 2. Check Cloudflare header (common if using Cloudflare)
     country = req.headers.get("cf-ipcountry")
 
-    print(f"DEBUG: Cloudflare Header: {cf_country} | Client IP: {req.client.host}")
+    
     if country: return country.upper()
     
     # 3. Check for Fly.io or other proxy headers if needed
