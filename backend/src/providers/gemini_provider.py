@@ -16,7 +16,10 @@ class GeminiProvider(LLMProvider):
             raise RuntimeError("GOOGLE_API_KEY (Gemini) not set.")
         
         model = model or "gemini-1.5-flash"
-        # Use self.api_key in the URL
+# ADD this line immediately after to ensure the model name is clean:
+        model = str(model).strip() # Ensure it's a string and remove leading/trailing whitespace
+
+# The URL line itself is likely correct, but ensure the f-string is precise:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
         headers = {"Content-Type": "application/json"}
 

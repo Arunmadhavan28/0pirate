@@ -344,7 +344,7 @@ export default function PricingPage({
                 )}
                 {plan.id === "enterprise" && (
                   <button
-                    onClick={() => window.open("mailto:support@0pirate.com", "_blank")}
+                    onClick={() => window.location.href = "mailto:support@0pirate.com"}
                     className="btn btn-secondary w-full"
                   >
                     Contact Sales

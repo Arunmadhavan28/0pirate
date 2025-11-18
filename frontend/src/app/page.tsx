@@ -8,15 +8,17 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from
 import {
   User, Bot, Terminal, Clipboard, ClipboardCheck, LogOut, Github, Mail, KeyRound,
   Trash2, X, ShieldCheck, FileText, Zap, HelpCircle, Code, Settings, Edit, ChevronLeft, Loader2, MessageSquare, ExternalLink,
-  UploadCloud, ClipboardPaste, Crown
+  UploadCloud, ClipboardPaste, Crown,FlaskConical,Box,AlertCircle
 } from "lucide-react";
 
-import SyntaxHighlighter from "react-syntax-highlighter";
-import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
 import ReactMarkdown from 'react-markdown';
 import LandingPage from "./landing_page";
 import PricingPage from "./pricing";
-import Script from 'next/script';
+import SyntaxHighlighter from "react-syntax-highlighter";
+import { atomOneDark } from "react-syntax-highlighter/dist/esm/styles/hljs";
+
+import Script from "next/script";
+
 
 /* --- Interactive Components --- */
 function InteractiveBackground() {
@@ -90,7 +92,8 @@ const MODEL_OPTIONS: Record<string, string[]> = {
    Types and Hooks
 ---------------------------------------------------*/
 type JobStatus = "idle" | "loading" | "result" | "error" | "upgrade";
-type ResultShape = { result?: Record<string, string> | string; analysis?: string; notice?: string; job_id?: string; };
+type ResultShape = { result?: Record<string, string> | string; analysis?: string; notice?: string; job_id?: string;sandbox_result?: Record<string, any> | null; // Added sandbox_result
+  validation_result?: Record<string, any> | null; };
 
 function useJobPolling(jobId: string | null, token: string | null, onResult: (data: any) => void, onError: (err: string) => void, setStatus: (s: string) => void) {
     const tokenRef = useRef(token);
@@ -334,7 +337,7 @@ function QuotaExceededModal({ isOpen, onClose, onUpgrade, userTier }: {
                     <Crown size={32} className="text-white"/>
                 </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
                 <h3 className="text-2xl font-bold text-text-primary">
                     Daily Limit Reached
                 </h3>
@@ -803,18 +806,18 @@ function ApiKeysView({ token, savedKeys, onKeysChange }: {
                     </h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                         <label className="text-sm font-medium text-text-secondary">Key Name (Optional)</label>
                         <input className="input-base" type="text" placeholder="e.g., Personal Gemini Key" value={keyName} onChange={(e) => setKeyName(e.target.value)} disabled={!!editingKeyName} />
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                         <label className="text-sm font-medium text-text-secondary">Provider</label>
                         <select className="input-base" value={provider} onChange={(e) => setProvider(e.target.value)} disabled={!!editingKeyName}>
                             {Object.keys(MODEL_OPTIONS).filter((p) => !["auto", "ollama"].includes(p)).map((p) => <option key={p} value={p} className="capitalize">{p}</option>)}
                         </select>
                     </div>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-3">
                     <label className="text-sm font-medium text-text-secondary">API Key</label>
                     <input className="input-base" type="password" placeholder={editingKeyName ? "Enter new key to update" : "Paste your API key here"} value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
                 </div>
@@ -1162,7 +1165,9 @@ function restoreFromMaps(
         const sortedPlaceholders = Object.keys(reverseMap).sort((a, b) => b.length - a.length);
 
         for (const placeholder of sortedPlaceholders) {
+            // Escape regex special characters in the placeholder
             const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // Use RegExp to replace all occurrences globally
             content = content.replace(new RegExp(escapedPlaceholder, 'g'), reverseMap[placeholder]);
         }
         
@@ -1187,6 +1192,8 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   const [pastedCode, setPastedCode] = useState("");
   const [errorLog, setErrorLog] = useState("");
   const [task, setTask] = useState("fix_and_secure");
+  const [userPrompt, setUserPrompt] = useState(""); // NEW state for generate_code
+  const [languageHint, setLanguageHint] = useState("");
   const [result, setResult] = useState<ResultShape | null>(null);
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [status, setStatus] = useState("Select a task, provide code, and run the analysis.");
@@ -1295,8 +1302,12 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
   }, [restorationMaps]); // Add restorationMaps to the dependency array
 
   const fail = useCallback((err: string) => {
-    // This check is now broader and more robust.
-    const isQuotaError = err?.toLowerCase().includes("quota") || err?.toLowerCase().includes("limit");
+    // --- THIS IS THE FIX for "err.toLowerCase is not a function" ---
+    // Convert `err` to a string *before* calling .toLowerCase()
+    // This safely handles Error objects, strings, or any other type.
+    const errString = String(err);
+    const isQuotaError = errString?.toLowerCase().includes("quota") || errString?.toLowerCase().includes("limit");
+    // --- END OF FIX ---
 
     if (isQuotaError) {
       // It's a quota error, trigger the specific handlers
@@ -1309,7 +1320,7 @@ function MainApp({ token, savedKeys, onGuestQuotaExceeded, onUserQuotaExceeded }
       setView("idle");
     } else {
       // It's a genuine error, show the error view
-      setResult({ notice: `Error: ${err}` });
+      setResult({ notice: `Error: ${errString}` });
       setView("error");
       setStatus("Analysis failed");
     }
@@ -1350,7 +1361,15 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
 
    
   const submit = async () => {
-    if (!pastedCode.trim() && files.length === 0) return fail("Please paste or upload your code.");
+    if (task === "generate_code") {
+      if (!userPrompt.trim()) return fail("Please provide a prompt to generate code.");
+      // Code/Files are optional context for generation, not required.
+    } else {
+      // For all other tasks, code/files are required.
+      if (!pastedCode.trim() && files.length === 0) return fail("Please paste or upload your code.");
+    }
+    // Error log is only strictly required for fix_and_secure
+    if (task === "fix_and_secure" && !errorLog.trim()) return fail("Please paste the error log for fixing.");
   
     setView("loading");
     setResult(null);
@@ -1362,21 +1381,26 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
     if (provider === 'ollama') {
       try {
         setStatus("Connecting to local LLM...");
-        let prompt = `Task: ${task}\n\n`;
-        if (files.length > 0) {
-            const fileContent = await files[0].text();
-            prompt += `File: ${files[0].name}\n---\n${fileContent}`;
+        let promptContent = "";
+        if (task === "generate_code") {
+           promptContent = userPrompt; // Use user prompt directly for Ollama generation
         } else {
-            prompt += `Code:\n---\n${pastedCode}`;
-        }
-        if(errorLog) {
-            prompt += `\n\nError Log:\n---\n${errorLog}`;
+            promptContent = `Task: ${task}\n\n`;
+            if (files.length > 0) {
+                const fileContent = await files[0].text(); // Simple case for Ollama, maybe handle multiple later
+                promptContent += `File: ${files[0].name}\n---\n${fileContent}`;
+            } else {
+                promptContent += `Code:\n---\n${pastedCode}`;
+            }
+            if(errorLog) {
+                promptContent += `\n\nError Log:\n---\n${errorLog}`;
+            }
         }
 
         const ollamaResponse = await fetch('http://localhost:11434/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model: model, prompt: prompt, stream: false }),
+          body: JSON.stringify({ model: model, prompt: promptContent, stream: false }),
         });
 
         if (!ollamaResponse.ok) throw new Error(`Ollama server responded with status ${ollamaResponse.status}.`);
@@ -1385,65 +1409,88 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
         success(formattedResult);
 
       } catch (e: any) {
-        fail(`Connection failed. Please open the "Setup" guide for instructions on configuring your browser and Ollama server.`);
+        fail(`Connection failed. Please open the "Setup" guide for instructions.`);
       }
       return;
     }
 
+    // API Key checks (remain the same)
     const requiresKey = !['auto'].includes(provider);
     if (requiresKey) {
       if (token && !selectedKeyName) return fail(`Please select a saved API key for '${provider}' in your account settings.`);
       if (!token && !guestApiKey.trim()) return fail(`Please provide an API key for '${provider}' to continue.`);
     }
-    
+
     try {
-        // --- STEP 1: Call /api/redact endpoint ---
+        // STEP 1: Client-side Redaction
         setStatus("Securing code (client-side redaction)...");
         const redactionFormData = new FormData();
+        let hasFilesToRedact = false;
+
+        // **CORRECTION START**: Include files for ALL tasks (including generate_code context) in redaction
         if (files.length > 0) {
             files.forEach(file => redactionFormData.append("files", file, file.name));
-        } else {
+            hasFilesToRedact = true;
+        } else if (pastedCode.trim() && task !== "generate_code") { // Only redact pasted code if not generate_code
             redactionFormData.append("files", new Blob([pastedCode]), "pasted_code.py");
+            hasFilesToRedact = true;
+        } else if (task !== "generate_code" && files.length === 0 && !pastedCode.trim()) {
+             return fail("No code provided for redaction.");
         }
+        // **CORRECTION END**
 
         if (allowList.trim()) {
             const allowListArray = allowList.split(',').map(item => item.trim()).filter(Boolean);
             redactionFormData.append("allow_list_json", JSON.stringify(allowListArray));
         }
 
-        const redactRes = await fetch(`${BACKEND_URL}/api/redact`, {
-            method: "POST",
-            body: redactionFormData,
-        });
+        // Only call redact if there are actual files/code to process
+        let redactionData = { abstracted_files: {}, secret_maps: {}, abstraction_maps: {} };
+        if (hasFilesToRedact) { // Use the flag here
+            const redactRes = await fetch(`${BACKEND_URL}/api/redact`, {
+                method: "POST",
+                body: redactionFormData,
+            });
 
-        if (!redactRes.ok) {
-            const err = await redactRes.json();
-            throw new Error(`Redaction failed: ${err.detail || 'Server error'}`);
+            if (!redactRes.ok) {
+                const err = await redactRes.json();
+                throw new Error(`Redaction failed: ${err.detail || 'Server error'}`);
+            }
+            redactionData = await redactRes.json();
         }
 
-        const redactionData = await redactRes.json();
         const { abstracted_files, secret_maps, abstraction_maps } = redactionData;
+        setRestorationMaps({ secret_maps, abstraction_maps }); // Store maps for potential restoration
 
-        setRestorationMaps({ secret_maps, abstraction_maps });
-
-        // --- STEP 2: Call /api/process_code with ABSTRACTED code ---
+        // STEP 2: Call /api/process_code with ABSTRACTED data
         setStatus("Submitting analysis request...");
         const mainFormData = new FormData();
-        
         const abstractedFileEntries = Object.entries(abstracted_files);
-        for (const [path, content] of abstractedFileEntries) {
-            mainFormData.append("files", new Blob([content as string]), path);
-        }
 
-        // --- Update the tamper-evident hash to use the abstracted code ---
-        const abstractedContentString = abstractedFileEntries.sort((a,b) => a[0].localeCompare(b[0])).map(entry => entry[1]).join('');
-        const encoder = new TextEncoder();
-        const data = encoder.encode(abstractedContentString);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        mainFormData.append("tamper_evident_hash", hashHex);
-        
+        // Add abstracted files (could be original code OR context files) to the main form data
+        if (abstractedFileEntries.length > 0) {
+            for (const [path, content] of abstractedFileEntries) {
+                mainFormData.append("files", new Blob([content as string]), path);
+            }
+
+            const abstractedContentString = abstractedFileEntries.sort((a,b) => a[0].localeCompare(b[0])).map(entry => entry[1]).join('');
+            const encoder = new TextEncoder();
+            const data = encoder.encode(abstractedContentString);
+            // !! FIX: This must be SHA-256 !!
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            mainFormData.append("tamper_evident_hash", hashHex);
+
+        } else if (task !== "generate_code") {
+             // If not generating code and no files ended up here after redaction, error
+             return fail("Failed to prepare abstracted code for submission.");
+        } else if (task === "generate_code" && abstractedFileEntries.length === 0) {
+            // THIS IS THE FIX YOU STILL NEED TO ADD
+            mainFormData.append("tamper_evident_hash", "");
+        }
+      
+        // Append other form data
         mainFormData.append("task", task);
         if (errorLog) mainFormData.append("error_log", errorLog);
         mainFormData.append("provider", provider);
@@ -1451,10 +1498,24 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
         if (token && selectedKeyName) mainFormData.append("api_key_name", selectedKeyName);
         else if (!token && guestApiKey) mainFormData.append("api_key", guestApiKey);
         mainFormData.append("token_saver_enabled", String(tokenSaver));
+        mainFormData.append("cove_hardening_enabled", String(maxSecurity));
         
+        // --- THIS IS THE FIX ---
+        // We were missing cove_hardening_enabled, causing a 422 error
+        mainFormData.append("cove_hardening_enabled", String(maxSecurity));
+        // --- END OF FIX ---
+
+
+        // Append generate_code specific fields
+        if (task === "generate_code") {
+            mainFormData.append("user_prompt", userPrompt);
+            if (languageHint) mainFormData.append("language_hint", languageHint);
+        }
+
+        // Send request
         const headers: HeadersInit = {};
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        
+
         const mainRes = await fetch(`${BACKEND_URL}/api/process_code`, {
             method: "POST",
             headers,
@@ -1462,11 +1523,17 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
         });
 
         const d = await mainRes.json();
-        if (mainRes.ok) { 
-            setJobId(d.job_id); 
-            setStatus("Job submitted, processing..."); 
+        if (mainRes.ok) {
+            setJobId(d.job_id);
+            setStatus("Job submitted, processing...");
         } else {
-            fail(d.detail || "Submission failed.");
+            // Handle 422 errors by parsing the list
+            if (mainRes.status === 422 && d.detail && Array.isArray(d.detail)) {
+                const errorMsg = d.detail.map((err: any) => `${err.loc.join(' -> ')}: ${err.msg}`).join(', ');
+                fail(`Validation Error: ${errorMsg}`);
+            } else {
+                fail(d.detail || "Submission failed.");
+            }
         }
 
     } catch (e: any) {
@@ -1493,6 +1560,11 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
     setResult(null);
     setView("idle");
     setStatus("Select a task, provide code, and run the analysis.");
+    setFiles([]); // Clear uploaded files
+    setUserPrompt(""); // Clear generate prompt
+    setLanguageHint(""); // Clear language hint
+    setJobId(null);
+    setRestorationMaps(null);
   };
 
   useEffect(() => { 
@@ -1505,6 +1577,8 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
 
   const taskOptions = [
     { value: "fix_and_secure", label: "Fix & Secure", icon: Zap },
+    { value: "generate_tests", label: "Generate Tests", icon: FlaskConical }, 
+    { value: "generate_code", label: "Generate Code", icon: Box },
     { value: "code_review", label: "Code Review", icon: HelpCircle },
     { value: "documentation", label: "Add Documentation", icon: FileText },
     { value: "refactor", label: "Refactor", icon: Code },
@@ -1514,7 +1588,7 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
   return (
     <>
     <OllamaSetupModal isOpen={showOllamaHelp} onClose={() => setShowOllamaHelp(false)} />
-    <main className="content-grid">
+    <main className="content-grid flex-grow">
       <div className="left-pane flex flex-col gap-6">
         <div className="flex-grow space-y-6 overflow-y-auto pr-2">
           <motion.div 
@@ -1524,6 +1598,58 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
             animate="animate"
           >
             <motion.div variants={fadeInUp}>
+              {task === 'generate_code' ? (
+                // --- UI for Generate Code Task ---
+                <div className="space-y-6">
+                   <div className="code-wrapper group">
+                     <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
+                       <MessageSquare size={16} />
+                       Your Prompt
+                     </h4>
+                     <textarea
+                       className="code-input resize-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                       placeholder="Describe the code you want to generate (e.g., 'Create a Python function to calculate factorial')..."
+                       value={userPrompt}
+                       onChange={(e) => setUserPrompt(e.target.value)}
+                       rows={6} // Make prompt area larger
+                     />
+                   </div>
+                   <div className="code-wrapper group">
+                     <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
+                       <Code size={16} />
+                       Language Hint (Optional)
+                     </h4>
+                     <input
+                       type="text"
+                       className="input-base"
+                       placeholder="e.g., python, javascript, html"
+                       value={languageHint}
+                       onChange={(e) => setLanguageHint(e.target.value)}
+                      />
+                   </div>
+                    {/* Optional Context Upload */}
+                    <div
+                      {...getRootProps()}
+                      className={`code-wrapper group flex flex-col items-center justify-center text-center border-dashed border-2 hover:border-accent-primary transition-all cursor-pointer min-h-[150px] ${isDragActive ? 'border-accent-primary' : 'border-border-primary'}`}
+                    >
+                        <input {...getInputProps()} />
+                        <UploadCloud size={24} className="text-text-secondary mb-3" />
+                        <p className="font-semibold text-sm">Add Context Files (Optional)</p>
+                        <p className="text-xs text-text-secondary">{isDragActive ? "Drop files now..." : "Drag & drop or click to upload relevant files"}</p>
+                        {files.length > 0 && (
+                            <div className="mt-3 text-left w-full text-xs">
+                                <h5 className="font-semibold uppercase text-text-secondary">Context Files:</h5>
+                                <ul className="space-y-1 mt-1 max-h-20 overflow-y-auto"> {/* Added max-h and scroll */}
+                                    {files.map(file => (<li key={file.name} className="truncate">- {file.name}</li>))}
+                                </ul>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                // --- END UI for Generate Code Task ---
+              ) : (
+                // --- UI for Other Tasks (Code/Log Input) ---
+                <>
               <div className="flex gap-2 mb-4">
                   <motion.button 
                       onClick={() => setInputMode('paste')}
@@ -1577,7 +1703,7 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
                   </div>
                 )}
 
-                <div className="code-wrapper group lg:col-start-2">
+                <div className="code-wrapper group">
                    <h4 className="flex items-center gap-2 group-hover:text-accent-primary transition-colors">
                      <Terminal size={16} />
                      Terminal Log
@@ -1590,28 +1716,29 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
                    />
                 </div>
               </div>
+              </>
+              )}
             </motion.div>
 
             <motion.div className="card space-y-6" variants={fadeInUp}>
               <div className="space-y-3">
                 <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
-                  <Settings size={16} />
-                  Task Selection
+                  <Settings size={16} /> Task Selection
                 </label>
-                <select 
-                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
-                  value={task} 
+                <select
+                  className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30"
+                  value={task}
                   onChange={(e) => setTask(e.target.value)}
                 >
                   {taskOptions.map((option) => (
                     <option key={option.value} value={option.value}>
-                      {option.label}
+                       {option.label}
                     </option>
                   ))}
                 </select>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label className="text-sm font-medium text-text-secondary">Provider</label>
                   <select 
                     className="input-base transition-all duration-200 focus:ring-2 focus:ring-blue-500/30" 
@@ -1623,7 +1750,7 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
                     ))}
                   </select>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <label className="text-sm font-medium text-text-secondary">Model</label>
                     {provider === 'ollama' && (
@@ -1650,7 +1777,7 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
               </div>
 
               {provider !== 'auto' && provider !== 'ollama' && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label className="text-sm font-medium text-text-secondary">API Key</label>
                   {token ? (
                     <select 
@@ -1701,7 +1828,7 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
                />
 
                {/* --- ADD THIS NEW BLOCK FOR THE ALLOW LIST --- */}
-                <div className="space-y-3 pt-4 border-t border-border-secondary">
+                <div className="space-y-4 pt-5 border-t border-border-secondary">
                     <label className="text-sm font-medium text-text-secondary flex items-center gap-2">
                         <Edit size={16} />
                         Granular Controls (Optional)
@@ -1711,9 +1838,9 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
                         placeholder="Enter comma-separated words to keep (e.g., myApi, calculateTotal, React)"
                         value={allowList}
                         onChange={(e) => setAllowList(e.target.value)}
-                        rows={2}
+                        rows={3}
                     />
-                    <p className="text-xs text-text-secondary">
+                    <p className="text-xs text-text-secondary/80">
                         Identifiers listed here will not be abstracted. Useful for preserving public function names or specific library keywords.
                     </p>
                 </div>
@@ -1773,7 +1900,7 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
                 >
                    <Bot size={48} className="text-accent-primary" />
                    
-                   <div className="space-y-2">
+                   <div className="space-y-3">
                      <h3 className="text-lg font-semibold">Processing Your Code</h3>
                      <motion.p 
                        className="text-text-secondary"
@@ -1799,96 +1926,134 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
               )}
               
               {(view === 'result' || view === 'error') && result && (
-                <motion.div 
-                  key="result" 
-                  className="flex flex-col h-full space-y-6"
+                <motion.div
+                  key="result"
+                  className="flex flex-col h-full space-y-6 overflow-y-auto p-1" // Added overflow-y-auto and padding
                   variants={fadeInUp}
                   initial="initial"
                   animate="animate"
                   exit="exit"
                 >
+                    {/* Analysis Section (Keep existing) */}
                     {result.analysis && (
-                      <motion.div 
-                        className="space-y-3"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                      >
-                        <h3 className="flex items-center gap-2 font-semibold text-text-primary">
-                          <Bot size={20} className="text-accent-primary" /> 
-                          AI Analysis
-                        </h3>
-                        <div className="bg-background-light/50 p-4 rounded-lg border border-border-primary max-h-48 overflow-y-auto">
-                          <ReactMarkdown 
-                            className="prose prose-invert prose-sm max-w-none"
-                          >
-                            {result.analysis}
-                          </ReactMarkdown>
+                      <motion.div className="space-y-3" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                        <h3 className="flex items-center gap-2 font-semibold text-text-primary"><Bot size={20} className="text-accent-primary" /> AI Analysis</h3>
+                        <div className="bg-background-light/50 p-4 rounded-lg border border-border-primary max-h-48 overflow-y-auto prose prose-invert prose-sm max-w-none">
+                           <ReactMarkdown>{result.analysis}</ReactMarkdown>
                         </div>
                       </motion.div>
                     )}
-                    
-                    <div className="flex-grow flex flex-col min-h-0 mt-6">
+
+                   {/* Code Output Section (Keep existing structure) */}
+                   <div className="flex-grow flex flex-col min-h-0">
                       <div className="flex justify-between items-center mb-4">
                          <h3 className="text-lg font-semibold flex items-center gap-2">
-                           <Code size={20} />
-                           Corrected Code
+                           {task === 'generate_tests' ? <FlaskConical size={20} /> : (task === 'generate_code' ? <Box size={20} /> : <Code size={20} />)} {/* Dynamic Icon */}
+                           {task === 'generate_tests' ? 'Generated Tests' : (task === 'generate_code' ? 'Generated Code' : 'Corrected Code')} {/* Dynamic Title */}
                          </h3>
-                         <motion.button 
-                           onClick={() => copy()} 
-                           className="btn btn-secondary flex items-center gap-2"
-                           whileHover={{ scale: 1.05 }}
-                           whileTap={{ scale: 0.95 }}
-                         >
-                           {copyOK ? (
-                             <>
-                               <ClipboardCheck size={16} className="text-green-400" />
-                               {copyOK}
-                             </>
-                           ) : (
-                             <>
-                               <Clipboard size={16} />
-                               Copy Code
-                             </>
-                           )}
+                         <motion.button onClick={() => copy()} className="btn btn-secondary flex items-center gap-2" whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                           {copyOK ? (<><ClipboardCheck size={16} className="text-green-400" /> {copyOK}</>) : (<><Clipboard size={16} /> Copy Code</>)}
                          </motion.button>
                       </div>
-
-                      {typeof resultData === 'object' && Object.keys(resultData).length > 1 && (
-                        <div className="flex gap-2 mb-3 border-b border-border-primary pb-2 flex-wrap">
-                          {Object.keys(resultData).map(filename => (
-                            <button
-                              key={filename}
-                              onClick={() => setActiveFile(filename)}
-                              className={`btn btn-secondary text-xs px-3 py-1 ${activeFile === filename ? 'bg-accent-primary text-white border-accent-primary' : ''}`}
-                            >
-                              {filename}
-                            </button>
-                          ))}
-                        </div>
+                      {typeof resultData === 'object' && Object.keys(resultData).length > 1 && ( /* Multi-file tabs */
+                        <div className="flex gap-2 mb-3 border-b border-border-primary pb-2 flex-wrap"> {Object.keys(resultData).map(filename => (<button key={filename} onClick={() => setActiveFile(filename)} className={`btn btn-secondary text-xs px-3 py-1 ${activeFile === filename ? 'bg-accent-primary text-white border-accent-primary' : ''}`}>{filename}</button>))} </div>
                       )}
                       <div className="code-output-wrapper flex-grow rounded-lg bg-code-editor border border-border-primary p-4 overflow-auto">
-                        <SyntaxHighlighter 
-                          language={language}
-                          style={atomOneDark} 
-                          wrapLines={true} 
-                          wrapLongLines={true}
-                          customStyle={{ 
-                            background: 'transparent', 
-                            padding: 0, 
-                            margin: 0, 
-                            fontSize: '14px',
-                            whiteSpace: 'pre-wrap', 
-                            wordBreak: 'break-all'  
-                          }}
-                          useInlineStyles={true}
-                          PreTag="div" 
-                        >
-                          {activeFileContent || result.notice || "No code returned."}
+                        <SyntaxHighlighter language={language} style={atomOneDark} wrapLines={true} wrapLongLines={true} customStyle={{ background: 'transparent', padding: 0, margin: 0, fontSize: '14px', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }} useInlineStyles={true} PreTag="div" >
+                           {activeFileContent || result.notice || "No code returned."}
                         </SyntaxHighlighter>
                       </div>
                     </div>
+                     {/* --- END Code Output Section --- */}
+
+
+                    {/* --- NEW: Sandbox Result Display (for generate_tests) --- */}
+                    {result.sandbox_result && (
+                       <motion.div className="space-y-3 pt-4 border-t border-border-secondary" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+                           <h3 className="flex items-center gap-2 font-semibold text-text-primary">
+                               <FlaskConical size={20} className={result.sandbox_result.status === 'success' ? 'text-green-400' : 'text-red-400'} />
+                               Sandbox Test Run
+                               <Badge tone={result.sandbox_result.status === 'success' ? 'success' : 'error'}>
+                                   Status: {result.sandbox_result.status || 'unknown'}
+                               </Badge>
+                           </h3>
+                           {(result.sandbox_result.stdout || result.sandbox_result.stderr) && (
+                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-60 overflow-y-auto bg-background-deep p-3 rounded border border-border-secondary"> {/* Added bg, padding, border */}
+                                   {result.sandbox_result.stdout && (
+                                       <div className="bg-background-light/50 p-3 rounded-lg border border-border-primary">
+                                           <h4 className="text-xs font-semibold text-text-secondary mb-2">Stdout:</h4>
+                                           <pre className="text-xs font-mono whitespace-pre-wrap break-all">{result.sandbox_result.stdout}</pre>
+                                       </div>
+                                   )}
+                                   {result.sandbox_result.stderr && (
+                                       <div className="bg-red-900/10 p-3 rounded-lg border border-red-500/20">
+                                           <h4 className="text-xs font-semibold text-red-400 mb-2">Stderr:</h4>
+                                           <pre className="text-xs font-mono whitespace-pre-wrap break-all text-red-300">{result.sandbox_result.stderr}</pre>
+                                       </div>
+                                   )}
+                               </div>
+                           )}
+                           {result.sandbox_result.error && (
+                               <p className="text-sm text-red-400">Sandbox Error: {result.sandbox_result.error}</p>
+                           )}
+                       </motion.div>
+                    )}
+                    {/* --- END Sandbox Result Display --- */}
+
+
+                    {/* --- NEW: Validation Result Display (for generate_code) --- */}
+                    {result.validation_result && !result.validation_result.error && (
+                      <motion.div className="space-y-3 pt-4 border-t border-border-secondary" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+                         <h3 className="flex items-center gap-2 font-semibold text-text-primary">
+                             <Box size={20} className="text-purple-400" />
+                             Code Validation
+                         </h3>
+                         <div className="flex gap-4 items-center bg-background-light/50 p-3 rounded-lg border border-border-primary">
+                            <Badge tone={result.validation_result?.overall?.errors > 0 ? 'error' : (result.validation_result?.overall?.warnings > 0 ? 'warning' : 'success')}>
+                                {result.validation_result?.overall?.errors > 0 ? 'Errors Found' : (result.validation_result?.overall?.warnings > 0 ? 'Warnings Found' : 'Validation Passed')}
+                            </Badge>
+                             <p className="text-sm text-text-secondary">
+                                 Errors: <span className="font-semibold text-red-400">{result.validation_result?.overall?.errors || 0}</span>,
+                                 Warnings: <span className="font-semibold text-yellow-400">{result.validation_result?.overall?.warnings || 0}</span>
+                             </p>
+                         </div>
+                         {/* Display detailed findings */}
+                         {Object.values(result.validation_result?.files || {}).some((file: any) => file.findings?.length > 0) && (
+                            <details className="text-sm cursor-pointer mt-2">
+                                <summary className="text-text-secondary hover:text-white transition-colors">Show detailed findings...</summary>
+                                <div className="mt-2 space-y-4 max-h-60 overflow-y-auto bg-background-deep p-3 rounded border border-border-secondary">
+                                    {Object.entries(result.validation_result?.files || {}).map(([path, fileResult]: [string, any]) => (
+                                        fileResult.findings?.length > 0 && (
+                                            <div key={path}>
+                                                <p className="font-mono text-xs text-purple-300 mb-1">{path}</p>
+                                                <ul className="list-disc pl-5 space-y-1">
+                                                    {fileResult.findings.map((finding: any, idx: number) => (
+                                                        <li key={idx} className={`text-xs flex items-start gap-2 ${finding.severity === 'error' ? 'text-red-300' : (finding.severity === 'warning' ? 'text-yellow-300' : 'text-gray-400')}`}>
+                                                          <AlertCircle size={12} className={`mt-0.5 flex-shrink-0 ${finding.severity === 'error' ? 'text-red-500' : 'text-yellow-500'}`} />
+                                                          <span>
+                                                            <span className="font-semibold">[{finding.tool || 'validator'}]</span> Line {finding.line || 'N/A'}: {finding.message}
+                                                          </span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        )
+                                    ))}
+                                </div>
+                            </details>
+                         )}
+                      </motion.div>
+                    )}
+                     {result.validation_result?.error && (
+                       <motion.div className="pt-4 border-t border-border-secondary" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                            <p className="text-sm text-red-400 flex items-center gap-2"><AlertCircle size={16}/> Validation Error: {result.validation_result.error}</p>
+                       </motion.div>
+                     )}
+                    {/* --- END Validation Result Display --- */}
+
                 </motion.div>
               )}
+               {/* --- END Result/Error View --- */}
             </AnimatePresence>
         </div>
       </aside>
@@ -1966,27 +2131,21 @@ export default function Home() {
       // CHANGE 3: Use the correct field 'order_id' from the backend response
       order_id: orderData.order_id,
       
-      handler: async function (paymentResponse: any) {
-        await fetch(`${BACKEND_URL}/api/verify-payment`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            razorpay_order_id: paymentResponse.razorpay_order_id,
-            razorpay_payment_id: paymentResponse.razorpay_payment_id,
-            razorpay_signature: paymentResponse.razorpay_signature,
-          }),
-        });
-        
-        setShowPricingPage(false);
-        // You might want to refresh the user's profile here to show their new tier
-        if (user) {
-          loadUserProfile(user.id);
-        }
-        alert("Payment Successful! Your plan has been upgraded.");
-      },
+      handler: function (_paymentResponse: any) {
+  // The backend webhook at /api/razorpay-webhook will handle the upgrade.
+  // We just close the UI and tell the user the upgrade is processing.
+  
+  setShowPricingPage(false);
+  alert("Payment Successful! Your plan is now being upgraded.");
+
+  if (user) {
+    // We call loadUserProfile after a short delay to give the
+    // backend webhook time to arrive and update the database.
+    setTimeout(() => {
+        loadUserProfile(user.id);
+    }, 2500); // 2.5 second delay
+  }
+},
       
       prefill: {
         email: user?.email,
@@ -2029,13 +2188,19 @@ export default function Home() {
     } catch (e) { console.error("Failed to load keys:", e); setSavedKeys([]); }
   }, [token]);
 
+  
   const loadUserProfile = useCallback(async (userId: string) => {
     if (!userId) return;
     try {
       const { data, error } = await supabase.from('profiles').select('tier').eq('id', userId).single();
       if (error) { throw error; }
       if (data) { setUserTier(data.tier || "free"); }
-    } catch (e) { console.error("Failed to load user profile:", e); setUserTier("free"); }
+    } catch (e: any) { 
+      // --- THIS IS THE FIX ---
+      // Use String(e.message || e) to avoid the "[object Object]" or "{}" logs
+      console.error("Failed to load user profile:", String(e.message || e)); 
+      setUserTier("free"); 
+    }
   }, []);
 
   useEffect(() => { if (token) { loadKeys(); } }, [token, loadKeys]);
@@ -2061,6 +2226,10 @@ export default function Home() {
         id="razorpay-checkout-js"
         src="https://checkout.razorpay.com/v1/checkout.js"
       />
+      <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" async defer></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js" async defer></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js" async defer></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-javascript.min.js" async defer></script>
       <InteractiveBackground />
       <style>{`
         body::before {

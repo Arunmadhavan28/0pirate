@@ -18,3 +18,4 @@ class Settings
     qwen_host str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434"
 
 settings = Settings()
+

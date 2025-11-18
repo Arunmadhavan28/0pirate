@@ -116,7 +116,7 @@ def _safe_json_loads(text: str) -> Any:
     return None
 
 
-def extract_fenced_code_blocks(text: str) -> List[Tuple[Optional[str], str]]:
+def extractfencedcodeblocks(text: str) -> List[Tuple[Optional[str], str]]:
     """
     Extracts fenced code blocks from text.
 
@@ -135,7 +135,7 @@ def extract_fenced_code_blocks(text: str) -> List[Tuple[Optional[str], str]]:
     return blocks
 
 
-def ensure_code_format(code: str) -> str:
+def ensurecodeformat(code: str) -> str:
     """
     Ensure code string is normalized: str type, ends with newline, and strips \r.
     This avoids tiny diffs in downstream patching.
@@ -150,7 +150,7 @@ def ensure_code_format(code: str) -> str:
     return code
 
 
-def language_hint_from_filename(filename: str) -> Optional[str]:
+def languagehintfromfilename(filename: str) -> Optional[str]:
     """
     Return a language hint based on file extension, commonly used in fenced code blocks.
     Examples: 'py', 'js', 'ts', 'java', 'c', 'cpp', 'go', 'rs', 'html', 'css', 'json', 'yaml'
@@ -230,10 +230,103 @@ def retry_with_backoff(
     return wrapper
 
 
+
+def buildgeneratetestsprompt(
+    project_files: Dict[str, str],
+    target_file: Optional[str] = None, # Optional: Specify which file to test
+    framework_hint: Optional[str] = None # Optional: e.g., 'pytest', 'jest'
+) -> str:
+    """
+    Builds a prompt asking the LLM to generate unit tests for the provided code.
+    """
+    # 1. Assemble project structure tree (context)
+    file_tree = "".join(f"- {path}\n" for path in sorted(project_files.keys()))
+
+    # 2. Prepare file contents with safe code fences
+    files_content = ""
+    for path, content in project_files.items():
+        lang = languagehintfromfilename(path) or detect_language(content) or "plaintext"
+        safe_content = content.replace("```", "``\\`")
+        files_content += f"---\n**File: {path}**\n```{lang}\n{safe_content}\n```\n\n"
+
+    # 3. Specific instructions for test generation
+    target_instruction = f"Focus on generating tests primarily for the file: `{target_file}`." if target_file else "Generate comprehensive tests covering the main functionalities."
+    framework_instruction = f"Use the `{framework_hint}` testing framework." if framework_hint else "Use the most appropriate standard testing framework for the language (e.g., pytest for Python, Jest for JS/TS, JUnit for Java)."
+
+    instructions = (
+        "ROLE: Expert Software Engineer in Test (SDET)\n"
+        "TASK: Generate high-quality unit tests for the provided code.\n\n"
+        f"{target_instruction}\n"
+        f"{framework_instruction}\n\n"
+        "RESPONSE RULES:\n"
+        "- Return ONLY the generated test code.\n"
+        "- Place the test code within appropriate file blocks (e.g., `**File: test_example.py**`).\n"
+        "- If multiple test files are generated, include each one.\n"
+        "- Ensure tests cover edge cases, common scenarios, and potential error conditions.\n"
+        "- Do NOT include explanations, analysis, or commentary outside the file blocks.\n"
+        "- If the language is Python, prefer `pytest`.\n"
+        "- If the language is JavaScript/TypeScript, prefer `Jest`.\n"
+    )
+
+    # 4. Assemble final structured prompt
+    prompt = (
+        f"{instructions}\n\n"
+        f"**Project Structure:**\n{file_tree}\n"
+        f"**File Contents:**\n{files_content}"
+    )
+
+    return prompt
+
+# --- NEW: Prompt Builder for Generating Code from Prompt ---
+def buildgeneratecodeprompt(
+    user_prompt: str,
+    context_files: Optional[Dict[str, str]] = None, # Optional: Files for context
+    language_hint: Optional[str] = None
+) -> str:
+    """
+    Builds a prompt asking the LLM to generate code based on a user's natural language prompt.
+    """
+    # 1. Context files (if provided)
+    files_content = ""
+    file_tree = ""
+    if context_files:
+        file_tree = "".join(f"- {path}\n" for path in sorted(context_files.keys()))
+        for path, content in context_files.items():
+            lang = languagehintfromfilename(path) or detect_language(content) or "plaintext"
+            safe_content = content.replace("```", "``\\`")
+            files_content += f"---\n**File: {path}** (Context)\n```{lang}\n{safe_content}\n```\n\n"
+
+    # 2. Language instruction
+    lang_instruction = f"Generate the code in `{language_hint}`." if language_hint else "Infer the best programming language based on the prompt, or default to Python if ambiguous."
+
+    # 3. Core instructions
+    instructions = (
+        "ROLE: Expert Software Engineer\n"
+        f"TASK: Generate code based on the user's request: **{user_prompt}**\n\n"
+        f"{lang_instruction}\n\n"
+        "RESPONSE RULES:\n"
+        "- Return ONLY the generated code.\n"
+        "- Place the code within appropriate file blocks (e.g., `**File: generated_code.py**`). Use descriptive filenames.\n"
+        "- If multiple files are needed (e.g., HTML + JS), include each one in separate blocks.\n"
+        "- Generate complete, runnable code. Include necessary imports and basic setup.\n"
+        "- Add comments explaining key parts of the logic.\n"
+        "- Do NOT include explanations, analysis, or commentary outside the file blocks.\n"
+    )
+
+    # 4. Assemble final structured prompt
+    prompt = f"{instructions}\n\n"
+    if context_files:
+        prompt += f"**Context Project Structure:**\n{file_tree}\n"
+        prompt += f"**Context File Contents:**\n{files_content}\n\n"
+    prompt += "**User Request:**\n" + user_prompt
+
+    return prompt
+
+
 # -------------------------
 # Prompt builders
 # -------------------------
-def build_multi_file_task_prompt(
+def buildmultifiletaskprompt(
     project_files: Dict[str, str],
     task: str,
     *,
@@ -282,9 +375,9 @@ def build_multi_file_task_prompt(
                 except Exception:
                     lang = None
             if not lang:
-                lang = language_hint_from_filename(path) or ""
+                lang = languagehintfromfilename(path) or ""
         except Exception:
-            lang = language_hint_from_filename(path) or ""
+            lang = languagehintfromfilename(path) or ""
 
         # sanitize triple backticks inside content by using quadruple backticks fence for the prompt
         safe_content = display_content.replace("```", "``\\`")
@@ -312,7 +405,7 @@ def build_multi_file_task_prompt(
     return prompt
 
 
-def build_strict_json_retry_prompt(original_instruction: str, last_response: str, *, error_message: Optional[str] = None) -> str:
+def buildstrictjsonretryprompt(original_instruction: str, last_response: str, *, error_message: Optional[str] = None) -> str:
     """
     Builds a stricter prompt to ask the model to return a JSON object with a 'files' mapping
     or 'code' key. This function is intended to be used on retry when the model's response
@@ -334,12 +427,12 @@ def build_strict_json_retry_prompt(original_instruction: str, last_response: str
     return instruction
 
 
-def build_correction_prompt(file_path: str, code: str, error_message: Optional[str] = None, strict_json: bool = False) -> str:
+def buildcorrectionprompt(file_path: str, code: str, error_message: Optional[str] = None, strict_json: bool = False) -> str:
     """
     Builds a corrective prompt for a single-file code correction.
     If strict_json=True the model is required to return {"code": "..."} as raw JSON.
     """
-    lang = language_hint_from_filename(file_path) or detect_language(code) or "text"
+    lang = languagehintfromfilename(file_path) or detect_language(code) or "text"
     instruction = (
         "You are an expert software engineer. A failing/incorrect file was provided along with an error description. "
         "Provide the complete corrected source for the file. "
@@ -361,7 +454,7 @@ def build_correction_prompt(file_path: str, code: str, error_message: Optional[s
 
 from typing import Dict, Optional
 
-def build_error_fix_prompt(
+def builderrorfixprompt(
     project_files: Dict[str, str],
     error_log: str,
     *,
@@ -385,7 +478,7 @@ def build_error_fix_prompt(
     # 2. Prepare file contents with safe code fences
     files_content = ""
     for path, content in project_files.items():
-        lang = language_hint_from_filename(path) or "plaintext"
+        lang = languagehintfromfilename(path) or "plaintext"
         safe_content = content.replace("```", "``\\`")
         files_content += f"---\n**File: {path}**\n```{lang}\n{safe_content}\n```\n\n"
 
@@ -462,7 +555,7 @@ def build_error_fix_prompt(
 # -------------------------
 # Parsing / Response handling
 # -------------------------
-def parse_multi_file_response(response_text: str) -> Dict[str, str]:
+def parsemultifileresponse(response_text: str) -> Dict[str, str]:
     """
     Parses the LLM's response to extract multiple code files into a dictionary.
 
@@ -473,7 +566,7 @@ def parse_multi_file_response(response_text: str) -> Dict[str, str]:
      - JSON with single "code" (returned as {"code": "..."}), caller can map to single file if needed.
 
     Returns:
-        mapping: file_path -> code_contents (all code normalized via ensure_code_format)
+        mapping: file_path -> code_contents (all code normalized via ensurecodeformat)
     """
     modified_files: Dict[str, str] = {}
 
@@ -490,11 +583,11 @@ def parse_multi_file_response(response_text: str) -> Dict[str, str]:
             for p, c in parsed["files"].items():
                 if not isinstance(p, str):
                     continue
-                modified_files[p.strip()] = ensure_code_format(str(c))
+                modified_files[p.strip()] = ensurecodeformat(str(c))
             return modified_files
         # fallback: single code key
         if "code" in parsed and isinstance(parsed["code"], str):
-            modified_files["<file>"] = ensure_code_format(parsed["code"])
+            modified_files["<file>"] = ensurecodeformat(parsed["code"])
             return modified_files
 
     # 2) Look for the explicit pattern: **File: path**\n```lang\ncode\n```
@@ -503,7 +596,7 @@ def parse_multi_file_response(response_text: str) -> Dict[str, str]:
         path = m.group(1).strip()
         code = m.group(3)
         if path:
-            modified_files[path] = ensure_code_format(code)
+            modified_files[path] = ensurecodeformat(code)
 
     if modified_files:
         return modified_files
@@ -514,12 +607,12 @@ def parse_multi_file_response(response_text: str) -> Dict[str, str]:
         path = m.group(1).strip()
         code = m.group(3)
         if path:
-            modified_files[path] = ensure_code_format(code)
+            modified_files[path] = ensurecodeformat(code)
     if modified_files:
         return modified_files
 
     # 4) If none of the above matched, extract all fenced code blocks and attempt to infer filenames
-    code_blocks = extract_fenced_code_blocks(text)
+    code_blocks = extractfencedcodeblocks(text)
     # Attempt to find preceding line mentioning filename
     lines = text.splitlines()
     for idx, (lang, code) in enumerate(code_blocks):
@@ -546,7 +639,7 @@ def parse_multi_file_response(response_text: str) -> Dict[str, str]:
                 fm2 = re.search(r"([A-Za-z0-9_\-./\\]+?\.(?:py|js|ts|java|go|rs|cpp|c|html|css|json|yaml|yml|md))", context)
                 if fm2:
                     file_hint = fm2.group(1).strip()
-        modified_files[file_hint] = ensure_code_format(code)
+        modified_files[file_hint] = ensurecodeformat(code)
 
     if modified_files:
         return modified_files
@@ -558,7 +651,7 @@ def parse_multi_file_response(response_text: str) -> Dict[str, str]:
         code_like = True
 
     if code_like:
-        modified_files["<file>"] = ensure_code_format(text)
+        modified_files["<file>"] = ensurecodeformat(text)
         return modified_files
 
     # If nothing matched, raise or return empty dict
@@ -581,10 +674,10 @@ def format_files_as_multifile_response(files: Dict[str, str], *, language_hints:
     """
     out = []
     for path in sorted(files.keys()):
-        content = ensure_code_format(files[path])
+        content = ensurecodeformat(files[path])
         lang = None
         if language_hints:
-            lang = language_hint_from_filename(path) or detect_language(content) or ""
+            lang = languagehintfromfilename(path) or detect_language(content) or ""
         # protect against triple backtick in content
         safe_content = content.replace("```", "``\\`")
         out.append(f"**File: {path}**\n```{lang}\n{safe_content}\n```")
@@ -594,7 +687,7 @@ def format_files_as_multifile_response(files: Dict[str, str], *, language_hints:
 # -------------------------
 # Small high-level flows (no provider calls)
 # -------------------------
-def attempt_parse_with_retries(
+def attemptparsewithretries(
     response_text: str,
     *,
     retry_cfg: Optional[RetryConfig] = None,
@@ -606,7 +699,7 @@ def attempt_parse_with_retries(
     Returns the parsed file mapping if successful; otherwise returns empty dict.
     """
     retry_cfg = retry_cfg or RetryConfig()
-    parsed = parse_multi_file_response(response_text)
+    parsed = parsemultifileresponse(response_text)
     if parsed:
         return parsed
 
@@ -617,23 +710,132 @@ def attempt_parse_with_retries(
     logger.debug("Parsing failed. Generated strict retry prompt for caller.")
     return {"_strict_prompt": strict_prompt}
 
+#Chain-of-Verification" (CoVe) layer
+
+def buildverificationplanningprompt(
+    original_error_log: str,
+    original_files: Dict[str, str],
+    first_pass_analysis: str
+) -> str:
+    """
+    Builds a prompt for the CoVe "Planning" step.
+    Asks the LLM to critique its own first-pass analysis and plan verification steps.
+    """
+    
+    # 1. Assemble project structure tree
+    file_tree = "".join(f"- {path}\n" for path in sorted(original_files.keys()))
+
+    # 2. Prepare file contents
+    files_content = ""
+    for path, content in original_files.items():
+        lang = languagehintfromfilename(path) or "plaintext"
+        safe_content = content.replace("```", "``\\`")
+        files_content += f"---\n**File: {path}**\n```{lang}\n{safe_content}\n```\n\n"
+
+    # 3. Assemble the prompt
+    instructions = (
+        "ROLE: Expert Principal Engineer (Verification & Audit)\n"
+        "TASK: You are auditing a solution proposed by a junior engineer. Your *only* job is to analyze their solution and list potential flaws or verification steps. You must NOT generate a new code fix.\n\n"
+        "RESPONSE FORMAT (strictly follow):\n"
+        "1. <analysis> block\n"
+        "   - Review the 'Original Problem' and the 'Proposed Solution Analysis'.\n"
+        "   - Critically evaluate the solution. Does it *fully* solve the error? Does it introduce new bugs? Is the reasoning sound?\n"
+        "   - List 3-5 specific verification questions to check if the solution is correct.\n"
+        "2. Do NOT include any code blocks.\n\n"
+        "--- EXAMPLE RESPONSE ---\n"
+        "<analysis>\n"
+        "The proposed solution correctly identifies the `TypeError`, but the plan to cast to `int` might fail if the variable is `None`.\n\n"
+        "Verification Questions:\n"
+        "1. Does the proposed solution handle cases where `<<VAR_a1b2c3>>` is `None` or an empty string?\n"
+        "2. Does the fix correctly import any new libraries it uses?\n"
+        "3. Does the fix address the *root cause* of the `TypeError` or just the symptom?\n"
+        "</analysis>\n"
+        "--- END EXAMPLE ---"
+    )
+
+    prompt = (
+        f"{instructions}\n\n"
+        f"**Original Problem:**\n```\n{original_error_log}\n```\n\n"
+        f"**Project Structure:**\n{file_tree}\n"
+        f"**File Contents:**\n{files_content}\n\n"
+        f"**Proposed Solution Analysis (from Junior Engineer):**\n<analysis>\n{first_pass_analysis}\n</analysis>"
+    )
+    return prompt
+
+
+def buildfinalverifiedfixprompt(
+    original_error_log: str,
+    original_files: Dict[str, str],
+    first_pass_analysis: str,
+    verification_analysis: str
+) -> str:
+    """
+    Builds a prompt for the CoVe "Final Fix" step.
+    Gives the LLM all context: problem, V1 fix analysis, and V2 critique.
+    """
+    
+    # 1. Assemble project structure tree
+    file_tree = "".join(f"- {path}\n" for path in sorted(original_files.keys()))
+
+    # 2. Prepare file contents
+    files_content = ""
+    for path, content in original_files.items():
+        lang = languagehintfromfilename(path) or "plaintext"
+        safe_content = content.replace("```", "``\\`")
+        files_content += f"---\n**File: {path}**\n```{lang}\n{safe_content}\n```\n\n"
+
+    # 3. Assemble the prompt
+    instructions = (
+        "ROLE: Expert Principal Engineer (Final Implementation)\n"
+        "TASK: You have received a junior engineer's solution and a senior engineer's critique. Your job is to synthesize all this information into a final, production-ready fix.\n\n"
+        "CONTEXT:\n"
+        "1. **Original Problem:** A user's code is failing with an error.\n"
+        "2. **First Analysis (V1):** Your first attempt at analyzing the problem.\n"
+        "3. **Verification Analysis (V2):** Your critical review of your own V1 analysis, which identifies potential flaws.\n\n"
+        "RESPONSE FORMAT (strictly follow):\n"
+        "1. <analysis> block\n"
+        "   - Briefly explain the final, correct fix.\n"
+        "   - Explicitly state how this final fix addresses the flaws identified in the 'Verification Analysis (V2)'.\n"
+        "2. Corrected Code Section\n"
+        "   - Provide the COMPLETE, FINAL, and FIXED code for every file you modify.\n"
+        "   - This is your last chance. Ensure the code is correct.\n"
+    )
+    
+    prompt = (
+        f"{instructions}\n\n"
+        f"**Original Problem:**\n```\n{original_error_log}\n```\n\n"
+        f"**Project Structure:**\n{file_tree}\n"
+        f"**File Contents:**\n{files_content}\n\n"
+        "--- ANALYSIS V1 (Your first attempt) ---\n"
+        f"<analysis>\n{first_pass_analysis}\n</analysis>\n\n"
+        "--- VERIFICATION ANALYSIS V2 (Your critique of V1) ---\n"
+        f"<analysis>\n{verification_analysis}\n</analysis>\n\n"
+        "--- FINAL IMPLEMENTATION ---\n"
+        "Now, generate the final, verified <analysis> and code blocks."
+    )
+    return prompt
+
 
 # -------------------------
 # Exported helpers / API
 # -------------------------
 __all__ = [
     "build_multi_file_task_prompt",
-    "parse_multi_file_response",
+    "parsemultifileresponse",
     "format_files_as_multifile_response",
-    "attempt_parse_with_retries",
-    "ensure_code_format",
-    "extract_fenced_code_blocks",
-    "language_hint_from_filename",
+    "attemptparsewithretries",
+    "ensurecodeformat",
+    "extractfencedcodeblocks",
+    "languagehintfromfilename",
     "build_correction_prompt",
     "build_strict_json_retry_prompt",
     "build_error_fix_prompt", 
     "retry_with_backoff",
     "RetryConfig",
+    "build_generate_tests_prompt",
+    "build_generate_code_prompt",
+    "build_verification_planning_prompt",
+    "build_final_verified_fix_prompt"
 ]
 
 

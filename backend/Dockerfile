@@ -2,19 +2,25 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install dependencies directly
+# System dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gcc build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy dependencies and install
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -r requirements.txt
 
-# Debug - check what's installed
-RUN pip list | grep -E "(uvicorn|razorpay|fastapi)" || echo "Some packages missing"
-RUN python -c "import uvicorn; print('uvicorn OK')" || echo "uvicorn failed"
-RUN python -c "import razorpay; print('razorpay OK')" || echo "razorpay failed"
 
-COPY seccomp_profile.json /app/seccomp_profile.json
-
-# Copy app
+# Copy the rest of your backend
 COPY . .
 
-# Simple command
-CMD ["python", "-m", "uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]
+
+# Debug - optional
+RUN python -c "import uvicorn, fastapi, razorpay; print('✅ All core libs OK')"
+
+# Expose API port
+EXPOSE 8080
+
+# Start FastAPI app
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]

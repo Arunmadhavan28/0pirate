@@ -40,6 +40,7 @@ class Settings:
 
     # CORRECTED: CORS Origins are now correctly read from the .env file
     cors_origins: list[str] = field(default_factory=_parse_cors_origins)
+    redis_url: str | None = os.getenv("REDIS_URL")
 
 # A single, global instance of your settings that the rest of the app can import
 settings = Settings()

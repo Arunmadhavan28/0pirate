@@ -12,9 +12,10 @@ import json
 import razorpay
 from fastapi import Header
 from typing import Annotated
-import hashlib 
+import hashlib
 import subprocess
 from src.client_redactor import run_redaction
+from typing import Union
 
 from fastapi import FastAPI, Request, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -23,7 +24,7 @@ from pydantic import BaseModel
 from supabase import create_client, Client
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.exceptions import RequestValidationError
-
+from src.validator import validate_files
 from src.config import settings
 from src.secure_wrapper import process_code_submission
 
@@ -40,9 +41,6 @@ class GlobalExceptionMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
             return response
-        # --- THIS IS THE FIX ---
-        # It now checks if the exception is an HTTPException (like our 429 quota error)
-        # and lets FastAPI handle it correctly, instead of turning it into a 500 error.
         except HTTPException as http_exc:
             raise http_exc
         except Exception as exc:
@@ -53,6 +51,8 @@ class GlobalExceptionMiddleware(BaseHTTPMiddleware):
 # CORS configuration (allows your frontend origins)
 origins = [
     "http://localhost:3000",
+    "http://127.0.0.1:3000", 
+    "http://0.0.0.0:3000", 
     "https://*.0pirate.com",
     "https://0pirate.com",
     "https://backend-muddy-moon-310.fly.dev",
@@ -71,8 +71,19 @@ app.add_middleware(
 # Explicit handlers for validation and general exceptions (ensures CORS on errors)
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    logger.error(f"Validation error at {request.url}: {exc}")
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    # Convert errors to JSON-serializable format
+    errors = []
+    for error in exc.errors():
+        error_dict = {
+            "type": error.get("type"),
+            "loc": error.get("loc"),
+            "msg": error.get("msg"),
+            "url": error.get("url", "")
+        }
+        # Don't include the 'input' field which contains UploadFile
+        errors.append(error_dict)
+    
+    return JSONResponse(status_code=422, content={"detail": errors})
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
@@ -107,18 +118,67 @@ async def get_current_user(req: Request) -> dict:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+def get_country_code(req: Request) -> str:
+    # 1. Check Vercel header
+    country = req.headers.get("x-vercel-ip-country")
+    if country: return country.upper()
     
+    # 2. Check Cloudflare header (common if using Cloudflare)
+    country = req.headers.get("cf-ipcountry")
+
+    print(f"DEBUG: Cloudflare Header: {cf_country} | Client IP: {req.client.host}")
+    if country: return country.upper()
+    
+    # 3. Check for Fly.io or other proxy headers if needed
+    # (Fly.io doesn't provide a country header by default, you may need an IP lookup service)
+    
+    # 4. Localhost / Development check
+    client_ip = req.client.host
+    if client_ip in ("127.0.0.1", "localhost", "::1"):
+        return "IN"
+        
+    # 5. Default Fallback
+    # If you are in India and testing on a server without headers, change this to "IN" temporarily.
+    # Otherwise, keep it "US".
+    return "US"
+
 async def get_optional_current_user(req: Request) -> Optional[dict]:
-    auth_header = req.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer "):
-        return None
-    token = auth_header.split(" ")[1]
+    """
+    Tries to get the current user via JWT, but returns None instead of raising
+    an exception if the user is not authenticated via JWT.
+    """
     try:
-        user_resp = supabase.auth.get_user(token)
-        if user_resp and getattr(user_resp, "user", None):
-            u = user_resp.user
-            return {"id": u.id, "email": u.email}
+        user = await get_current_user(req)
+        return user
+    except HTTPException as e:
+        if e.status_code == 401:
+            return None
+        raise e
+    except Exception:
         return None
+
+async def get_optional_authenticated_user(req: Request) -> Optional[dict]:
+    """
+    Tries to authenticate a user via JWT first, then falls back to Action Token.
+    Returns None if neither method works, instead of raising 401.
+    """
+    # Try Supabase JWT first
+    user = await get_optional_current_user(req)
+    if user:
+        return user
+
+    # Fallback to Action Token
+    action_token = req.headers.get("X-0Pirate-Action-Token")
+    if not action_token:
+        return None
+
+    try:
+        user_resp = supabase.rpc("get_user_by_action_token", {"p_token": action_token}).execute()
+        if user_resp.data:
+            return user_resp.data
+        else:
+            return None
     except Exception:
         return None
 
@@ -144,17 +204,21 @@ async def check_tier_quota(user_id: str, tier: str):
         if job_count >= limits["max_jobs_per_day"]:
             raise HTTPException(status_code=429, detail="Daily job limit exceeded for your tier")
     except HTTPException as http_exc:
-        # This is the crucial change: re-raise the specific 429 error
         raise http_exc
     except Exception as e:
         logger.error(f"Quota check failed for user {user_id}: {str(e)}", exc_info=True)
-        # This now only runs for TRUE internal errors (e.g., database down)
         raise HTTPException(status_code=500, detail="Could not verify usage quota.")
     
 async def check_anonymous_quota(req: Request):
     ip = req.client.host
     try:
         today = datetime.utcnow().date().isoformat()
+        
+        # --- ADD THIS DEBUG PRINT ---
+        limit_being_used = TIER_LIMITS["free"]["max_jobs_per_day"]
+        print(f"DEBUG: Checking anonymous quota for IP {ip}. Limit being used: {limit_being_used}")
+        # --- END OF DEBUG PRINT ---
+
         count_resp = supabase.table("jobs") \
             .select("*", count="exact", head=True) \
             .eq("ip_address", ip) \
@@ -162,14 +226,17 @@ async def check_anonymous_quota(req: Request):
             .gte("created_at", f"{today}T00:00:00") \
             .execute()
         job_count = count_resp.count if count_resp.count is not None else 0
-        if job_count >= TIER_LIMITS["free"]["max_jobs_per_day"]:
+        
+        # --- Optional: Print the current count ---
+        print(f"DEBUG: Current job count for IP {ip} today: {job_count}")
+        # --- End Optional Print ---
+
+        if job_count >= limit_being_used: # Use the variable here
             raise HTTPException(status_code=429, detail="Daily anonymous job limit exceeded")
     except HTTPException as http_exc:
-        # Re-raise the specific 429 error
         raise http_exc
     except Exception as e:
         logger.error(f"Anonymous quota check failed for IP {ip}: {str(e)}", exc_info=True)
-        # This now only runs for TRUE internal errors
         raise HTTPException(status_code=500, detail="Could not verify usage quota.")
 
 def get_api_key_for_provider(provider_name: str, user_api_key: Optional[str] = None) -> Optional[str]:
@@ -218,9 +285,6 @@ async def save_api_key(req: Request, body: ApiKeyRequest, user: dict = Depends(g
     except Exception as e:
         logger.error(f"Failed to save API key for user {user_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to save key.")
-    
-
-
 
 @app.delete("/api/keys")
 async def delete_api_key(req: Request, body: ApiKeyDeleteRequest, user: dict = Depends(get_current_user)):
@@ -248,11 +312,10 @@ async def get_user_keys(user: dict = Depends(get_current_user)):
 @app.post("/api/redact")
 async def api_redact_code(
     files: List[UploadFile] = File(...),
-    allow_list_json: Optional[str] = Form(None) # <-- FIX 1: Accept allow_list
+    allow_list_json: Optional[str] = Form(None)
 ):
     """
     A stateless endpoint that only performs redaction and abstraction.
-    It returns the abstracted code and the maps to the client, storing nothing.
     """
     project_files: Dict[str, str] = {}
     for file in files:
@@ -263,7 +326,6 @@ async def api_redact_code(
     if not project_files:
         raise HTTPException(status_code=400, detail="No files provided for redaction.")
 
-    # --- FIX 2: Parse the allow_list from the form data ---
     allow_list: Optional[List[str]] = None
     if allow_list_json:
         try:
@@ -273,11 +335,8 @@ async def api_redact_code(
         except json.JSONDecodeError:
             logger.warning("Invalid allow_list_json received, ignoring.")
             allow_list = None
-    # --- End of FIX 2 ---
 
     try:
-        # Use asyncio.to_thread to run the synchronous redaction logic without blocking
-        # --- FIX 3: Pass the allow_list to the function ---
         redaction_result = await asyncio.to_thread(
             run_redaction, 
             project_files=project_files, 
@@ -290,10 +349,8 @@ async def api_redact_code(
 
 @app.get("/api/plans")
 async def get_plans(req: Request):
-    country = req.headers.get("x-vercel-ip-country")
-    if not country:
-        client_ip = req.client.host 
-        country = "IN" if client_ip in ("127.0.0.1", "localhost") else "US"
+    # Use the helper function
+    country = get_country_code(req)
 
     if country == "IN":
         price_monthly_col = "price_monthly_inr"
@@ -351,10 +408,9 @@ razorpay_client = razorpay.Client(
 @app.post("/api/create-order")
 async def create_order(req: Request, body: CreateOrderRequest, user: dict = Depends(get_current_user)):
     user_id = user["id"]
-    country = req.headers.get("x-vercel-ip-country")
-    if not country:
-        client_ip = req.client.host
-        country = "IN" if client_ip in ("127.0.0.1", "localhost") else "US"
+    
+    # Use the same helper function to ensure currency matches what they saw on the pricing page
+    country = get_country_code(req)
 
     if country == "IN":
         price_col = f"price_{body.billing_cycle}_inr"
@@ -428,9 +484,10 @@ class ProcessRequestForm:
         api_key_name: Optional[str] = Form(None),
         api_key: Optional[str] = Form(None),
         token_saver_enabled: Optional[bool] = Form(False),
-        abstraction_enabled: Optional[bool] = Form(True),
-        abstraction_level: Optional[str] = Form("paranoid"),
-        tamper_evident_hash: str = Form(...)
+        tamper_evident_hash: Optional[str] = Form(None),
+        cove_hardening_enabled: Optional[bool] = Form(False),
+        user_prompt: Optional[str] = Form(None),
+        language_hint: Optional[str] = Form(None)
     ):
         self.task = task
         self.provider = provider
@@ -439,28 +496,29 @@ class ProcessRequestForm:
         self.api_key_name = api_key_name
         self.api_key = api_key
         self.token_saver_enabled = token_saver_enabled
-        self.abstraction_enabled = abstraction_enabled
-        self.abstraction_level = abstraction_level
+        self.tamper_evident_hash = tamper_evident_hash
+        self.cove_hardening_enabled = cove_hardening_enabled
+        self.user_prompt = user_prompt
+        self.language_hint = language_hint
 
-# [ADD THIS NEW DEPENDENCY FUNCTION at line 133, after get_user_tier]
 async def get_authenticated_user(req: Request) -> dict:
     """
     Authenticates a user via Supabase JWT (for web app) or a long-lived
     action token (for GitHub Action).
     """
-    # Try Supabase JWT first
     user = await get_optional_current_user(req)
     if user:
         return user
 
-    # Fallback to Action Token
     action_token = req.headers.get("X-0Pirate-Action-Token")
+
+    if action_token:
+        logger.info(f"Received action token ending in: ...{action_token[-4:]}")
+
     if not action_token:
         raise HTTPException(status_code=401, detail="Authentication required.")
     
     try:
-        # Assumes an RPC function `get_user_by_action_token` exists in Supabase
-        # that securely validates the token and returns the user's profile.
         user_resp = supabase.rpc("get_user_by_action_token", {"p_token": action_token}).execute()
         if user_resp.data:
             return user_resp.data
@@ -473,107 +531,172 @@ async def get_authenticated_user(req: Request) -> dict:
 @app.post("/api/process_code")
 async def api_process_code(
     req: Request,
-    files: List[UploadFile] = File(...),
+    files: Optional[Union[UploadFile, List[UploadFile]]] = File(None),  
     form_data: ProcessRequestForm = Depends(),
-    # --- FIX: Use the new, flexible authentication dependency ---
-    user: Optional[dict] = Depends(get_authenticated_user)
+    user: Optional[dict] = Depends(get_optional_authenticated_user) 
+    #user: Optional[dict] = None 
+
 ):
-    # --- NEW: Verification Logic at the beginning ---
-    # This part remains unchanged.
+    # ✅ Normalize files to always be a list
+    file_list = []
+    if files:
+        if isinstance(files, list):
+            file_list = files
+        else:
+            file_list = [files]  # Wrap single file in list
+    
+    # Hash Validation
     combined_content = ""
-    # Sort files by filename to match the client-side hashing order
-    sorted_files = sorted(files, key=lambda f: f.filename or "")
-    for file in sorted_files:
-        contents = await file.read()
-        # It's important to seek back to the start for later processing
-        await file.seek(0) 
-        combined_content += contents.decode("utf-8", errors="ignore")
+    if file_list:
+        sorted_files = sorted(file_list, key=lambda f: f.filename or "")
+        for file in sorted_files:
+            contents = await file.read()
+            await file.seek(0)
+            combined_content += contents.decode("utf-8", errors="ignore")
 
-    # Calculate the hash on the server
-    server_hash = hashlib.sha256(combined_content.encode("utf-8")).hexdigest()
+    is_generate_with_context = (form_data.task == "generate_code" and file_list)
+    is_other_task = (form_data.task != "generate_code")
 
-    # Compare with the hash sent from the client
-    if server_hash != form_data.tamper_evident_hash:
-        raise HTTPException(status_code=400, detail="Data integrity check failed. The request may have been tampered with.")
-    # --- END NEW ---
-
+    # FIXED: Added missing closing parenthesis
+    if is_other_task or is_generate_with_context:
+        if not form_data.tamper_evident_hash:
+            if combined_content:
+                raise HTTPException(status_code=400, detail="Tamper-evident hash is required for file uploads.")
+        
+        if form_data.tamper_evident_hash:
+            server_hash = hashlib.sha256(combined_content.encode("utf-8")).hexdigest()
+            if server_hash != form_data.tamper_evident_hash:
+                raise HTTPException(status_code=400, detail="Data integrity check failed.")
 
     user_id = None
     ip_address = None
     api_key = form_data.api_key
 
-    # The logic is now unified: every job needs a key.
+    # Authentication and Quota Logic
     if user:
-        # --- LOGGED-IN USER LOGIC ---
         user_id = user["id"]
-
-        # FIXED: Get the user's tier and check their quota BEFORE proceeding.
         user_tier = await get_user_tier(user_id)
         await check_tier_quota(user_id, user_tier)
 
-        # Logged-in users must use a saved key by providing its name.
-        if form_data.provider.lower() not in ["auto", "ollama"] and not form_data.api_key_name:
-            raise HTTPException(status_code=400, detail="Please select a saved API key.")
-        
-        if form_data.api_key_name:
+        if form_data.provider.lower() not in ["auto", "ollama"] and form_data.api_key_name:
             try:
-                # Fetches the user's saved API key
                 key_ref_resp = supabase.table("user_api_keys").select("encrypted_api_key_id").eq("user_id", user_id).eq("name", form_data.api_key_name).limit(1).single().execute()
                 if not key_ref_resp.data:
-                    raise HTTPException(status_code=400, detail=f"API key named '{form_data.api_key_name}' not found.")
+                    raise HTTPException(status_code=400, detail=f"API key '{form_data.api_key_name}' not found.")
                 secret_id = key_ref_resp.data["encrypted_api_key_id"]
                 decrypted_resp = supabase.rpc("reveal_secret", {"secret_id": secret_id}).execute()
                 api_key = decrypted_resp.data
+                if not api_key:
+                    raise HTTPException(status_code=500, detail=f"Failed to decrypt key '{form_data.api_key_name}'.")
             except Exception as e:
-                raise HTTPException(status_code=500, detail="Could not retrieve your saved API key.")
+                raise HTTPException(status_code=500, detail=str(e))
+        elif form_data.provider.lower() not in ["auto", "ollama"] and not form_data.api_key_name and not api_key:
+            raise HTTPException(status_code=400, detail="Please select a saved API key or provide one.")
 
     else:
-        # --- ANONYMOUS USER LOGIC ---
+        # Anonymous (guest) flow
         ip_address = req.client.host
-        
-        # FIXED: Check the anonymous user's quota BEFORE proceeding.
         await check_anonymous_quota(req)
+        # If client provided an api_key in form_data, use it (already in `api_key` variable).
+        # Otherwise, attempt to use the server-owned provider key (if configured).
+        provider_name = form_data.provider.lower() if form_data.provider else ""
+        if provider_name not in ['ollama', 'auto']:
+            # Try server-level key if client didn't pass one
+            if not api_key:
+                # --- FIX 1: MOVE QUOTA CHECK HERE ---
+                # The user has NO key and wants to use the server's.
+                # NOW we check the quota for using server resources.      
+                try:
+                    server_key = get_api_key_for_provider(provider_name, user_api_key=None)
+                    if server_key:
+                        api_key = server_key
+                    else:
+                        # --- FIX 2: CHANGE 401 to 503 ---
+                        # This is a server config issue, not an auth issue.
+                        raise HTTPException(status_code=503, detail=f"This server is not configured for anonymous '{provider_name}' use. Please sign in or provide your own API key.")
+                except HTTPException:
+                    # Re-raise quota (429) or 503 HTTPExceptions
+                    raise
+                except Exception as e:
+                    logger.error(f"Failed to fetch server API key for provider '{provider_name}': {e}", exc_info=True)
+                    raise HTTPException(status_code=500, detail="Server configuration error for provider keys.")
+            # If the user *did* provide an api_key (api_key was not empty),
+            # we skip this entire block, no quota is checked, and their key is used.
 
-        # For an anonymous user, a raw API key is ALWAYS required.
-        if form_data.provider.lower() != 'ollama' and not api_key:
-            raise HTTPException(status_code=401, detail="Please provide an API key to run an analysis.")
-
-    # --- (File processing and job creation logic is the same) ---
+    # File Processing - Handle .zip files
     project_files: Dict[str, str] = {}
-    with tempfile.TemporaryDirectory() as tmpdir:
-        is_zip = len(files) == 1 and files[0].filename and files[0].filename.lower().endswith(".zip")
-        if is_zip:
-            zip_path = os.path.join(tmpdir, files[0].filename)
-            with open(zip_path, "wb") as f: shutil.copyfileobj(files[0].file, f)
-            with zipfile.ZipFile(zip_path, "r") as zf: zf.extractall(tmpdir)
-            for root, _, fnames in os.walk(tmpdir):
-                for fname in fnames:
-                    if not fname.lower().endswith(".zip") and not fname.startswith("._"):
-                        fpath = os.path.join(root, fname)
-                        rpath = os.path.relpath(fpath, tmpdir)
-                        try:
-                            with open(fpath, "r", encoding="utf-8", errors="ignore") as f: project_files[rpath] = f.read()
-                        except (IOError, OSError): pass
-        else:
-            for file in files:
-                contents = await file.read()
-                if file.filename: project_files[file.filename] = contents.decode("utf-8", errors="ignore")
+    
+    if file_list:
+        for file in file_list:
+            await file.seek(0)
+            contents = await file.read()
+            filename = file.filename or "unknown"
+            
+            # ✅ Check if it's a .zip file
+            if filename.endswith('.zip'):
+                try:
+                    # Extract .zip contents
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.zip') as tmp_zip:
+                        tmp_zip.write(contents)
+                        tmp_zip_path = tmp_zip.name
+                    
+                    # Extract and read all files from zip
+                    with zipfile.ZipFile(tmp_zip_path, 'r') as zip_ref:
+                        for zip_info in zip_ref.infolist():
+                            if not zip_info.is_dir():
+                                with zip_ref.open(zip_info) as zipped_file:
+                                    file_content = zipped_file.read().decode("utf-8", errors="ignore")
+                                    project_files[zip_info.filename] = file_content
+                    
+                    # Cleanup temp file
+                    os.remove(tmp_zip_path)
+                    logger.info(f"Extracted {len(project_files)} files from {filename}")
+                    
+                except zipfile.BadZipFile:
+                    raise HTTPException(status_code=400, detail=f"Invalid zip file: {filename}")
+                except Exception as e:
+                    logger.error(f"Failed to extract zip file {filename}: {e}")
+                    raise HTTPException(status_code=500, detail=f"Failed to process zip file: {str(e)}")
+            else:
+                # ✅ Regular file (single file)
+                project_files[filename] = contents.decode("utf-8", errors="ignore")
 
-    if not project_files:
-        raise HTTPException(status_code=400, detail="No processable files found.")
+    # Validation based on task
+    if form_data.task != "generate_code" and not project_files:
+        raise HTTPException(status_code=400, detail="File upload is required for this task.")
+    if form_data.task == "generate_code" and not form_data.user_prompt:
+        raise HTTPException(status_code=400, detail="A text prompt is required to generate code.")
 
     job_id = str(uuid.uuid4())
-    job_payload = {**form_data.__dict__, "project_files": project_files, "api_keys": {"api_key": api_key}}
-    
+
+    job_payload = {
+        "abstracted_project_files": project_files,
+        "original_project_files": project_files,
+        "provider_name": form_data.provider,
+        "model": form_data.model,
+        "task": form_data.task,
+        "error_log": form_data.error_log,
+        "token_saver": form_data.token_saver_enabled,
+        "api_keys": {"api_key": api_key},
+        "use_cove_hardening": form_data.cove_hardening_enabled,
+        "user_prompt_for_generation": form_data.user_prompt,
+        "language_hint_for_generation": form_data.language_hint
+    }
+
     job_metadata = {
         "job_id": job_id, "user_id": user_id, "ip_address": ip_address, "status": "pending",
         "task": form_data.task, "provider": form_data.provider, "created_at": datetime.utcnow().isoformat()
     }
     
-    JOB_STORE[job_id] = job_metadata
-    supabase.table("jobs").insert(job_metadata).execute()
+    JOB_STORE[job_id] = {**job_metadata, "result": None, "analysis": None, "notice": None, "sandbox_result": None, "validation_result": None}
+    
+    try:
+        supabase.table("jobs").insert(job_metadata).execute()
+    except Exception as db_exc:
+        logger.error(f"Failed to insert job metadata into Supabase: {db_exc}")
 
     asyncio.create_task(process_job_background(job_id, job_payload))
+
     return JSONResponse({"job_id": job_id})
 
 
@@ -581,58 +704,80 @@ async def call_llm_and_process(payload: dict) -> dict:
     try:
         result_dict = await asyncio.to_thread(
             process_code_submission,
-            project_files=payload.get("project_files", {}),
-            provider_name=payload.get("provider"),
+            abstracted_project_files=payload.get("abstracted_project_files", {}),
+            original_project_files=payload.get("original_project_files", {}),
+            provider_name=payload.get("provider_name"),
             model=payload.get("model"),
             task=payload.get("task"),
             error_log=payload.get("error_log"),
-            token_saver=payload.get("token_saver_enabled", False),
+            token_saver=payload.get("token_saver", False),
             api_keys=payload.get("api_keys"),
-            abstraction_enabled=payload.get("abstraction_enabled"),
-            abstraction_level=payload.get("abstraction_level"),
-            abstraction_chunking=payload.get("abstraction_chunking"),
-            abstraction_noise=payload.get("abstraction_noise"),
+            use_cove_hardening=payload.get("use_cove_hardening", False),
+            user_prompt_for_generation=payload.get("user_prompt_for_generation"),
+            language_hint_for_generation=payload.get("language_hint_for_generation")
         )
-        return {"success": True, **result_dict}
+        output = {"success": True, **result_dict}
+        if "validation_result" in result_dict:
+            output["validation_result"] = result_dict["validation_result"]
+        return output
+
     except Exception as e:
-        logger.error(f"Job failed: {str(e)}", exc_info=True)
-        return {"success": False, "notice": "An internal error occurred during processing."}
+        tb_str = traceback.format_exc()
+        logger.error(f"Job failed during call_llm_and_process: {str(e)}\nTraceback:\n{tb_str}")
+        error_msg = str(e) if isinstance(e, (ValueError, HTTPException)) else "An internal error occurred during processing."
+        return {"success": False, "notice": error_msg}
 
 async def process_job_background(job_id: str, payload: dict):
     job = JOB_STORE.get(job_id)
-    if not job: return
+    if not job:
+        return
 
     job["status"] = "running"
-    supabase.table("jobs").update({"status": "running"}).eq("job_id", job_id).execute()
+    try:
+        supabase.table("jobs").update({"status": "running"}).eq("job_id", job_id).execute()
+    except Exception as db_exc:
+        logger.warning(f"Failed to update job status to running in DB for {job_id}: {db_exc}")
 
+    db_update = {}
     try:
         response = await call_llm_and_process(payload)
-        # 1. Update the full result in the temporary IN-MEMORY store for the user to fetch.
         full_result_update = {
             "status": "completed" if response.get("success") else "failed",
             "result": response.get("result"),
             "notice": response.get("notice"),
             "analysis": response.get("analysis"),
             "sandbox_result": response.get("sandbox_result"),
+            "validation_result": response.get("validation_result")
         }
         JOB_STORE[job_id].update(full_result_update)
 
-        # 2. Create a separate, REDACTED dictionary for the PERMANENT database record.
         db_update = {
             "status": full_result_update["status"],
             "notice": full_result_update["notice"],
-            # DO NOT include "result" or "analysis".
         }
 
     except Exception as e:
-        db_update = {"status": "failed", "notice": f"Internal error: {str(e)}"}
-    
-    # 3. Only save the non-sensitive metadata to Supabase.
-    supabase.table("jobs").update(db_update).eq("job_id", job_id).execute()
+        db_update = {"status": "failed", "notice": f"Internal processing error: {str(e)}"}
+        if job_id in JOB_STORE:
+            JOB_STORE[job_id].update(db_update)
+
+    try:
+        supabase.table("jobs").update(db_update).eq("job_id", job_id).execute()
+    except Exception as db_exc:
+        logger.error(f"Failed to update job final status in Supabase for {job_id}: {db_exc}")
 
 @app.get("/api/status/{job_id}")
-async def get_job_status(req: Request, job_id: str, user: Optional[dict] = Depends(get_optional_current_user)):
+async def get_job_status(
+    req: Request, 
+    job_id: str, 
+    user: Optional[dict] = Depends(get_optional_authenticated_user)
+    #user: Optional[dict] = None 
+
+   
+
+):
     job = JOB_STORE.get(job_id)
+    
     if job:
         if user and job.get("user_id") == user["id"]:
             return JSONResponse(job)
@@ -652,6 +797,8 @@ async def get_job_status(req: Request, job_id: str, user: Optional[dict] = Depen
     except Exception as e:
         logger.error(f"Failed to fetch job {job_id}: {str(e)}", exc_info=True)
         raise HTTPException(status_code=404, detail="Job not found or not authorized")
+    
+    raise HTTPException(status_code=403, detail="Not authorized to view this job")
 
 @app.get("/health")
 async def health_check():

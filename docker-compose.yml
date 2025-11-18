@@ -3,11 +3,18 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8000:8000"
+      - "5001:8080"  # Exposes the container's port 8080 (from your CMD) to host port 5001
+    environment:
+      
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_KEY=${SUPABASE_KEY}
+      - REDIS_URL=${REDIS_URL}
     env_file: .env
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
   frontend:
     build:
       context: ./frontend
     ports:
-      - "3000:3000"
+      - "3000:5001"
     env_file: .env

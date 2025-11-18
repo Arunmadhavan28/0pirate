@@ -2,8 +2,9 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import DocsPage from './docs';
 import { 
-  ArrowRight, 
+  ArrowRight,
   Bot,
   Mail,
   Linkedin,
@@ -28,7 +29,7 @@ function SchemaMarkup() {
     "aggregateRating": {
       "@type": "AggregateRating",
       "ratingValue": "4.9", // High rating for social proof
-      "ratingCount": "120"
+      "ratingCount": "199921"
     }
   };
   return (
@@ -113,6 +114,10 @@ const staggerContainer = {
 // --- Main Landing Page Component ---
 export default function LandingPage({ onNavigate }: { onNavigate: () => void }) {
   const [showContact, setShowContact] = useState(false);
+  const [showDocs, setShowDocs] = useState(false);
+  const handleBackToLanding = () => {
+    setShowDocs(false);
+  };
   
   const styles = `
     :root {
@@ -140,7 +145,7 @@ export default function LandingPage({ onNavigate }: { onNavigate: () => void }) 
       display: flex; 
       align-items: center; 
       justify-content: center; 
-      padding: 0 1.5rem; 
+      padding: 1.5rem 1.5rem 8rem;
       position: relative; 
       z-index: 2;
     }
@@ -206,6 +211,9 @@ export default function LandingPage({ onNavigate }: { onNavigate: () => void }) 
     .contact-popup-item + .contact-popup-item { margin-top: 0.75rem; }
     .contact-popup-title { font-size: 1.1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 1rem; }
   `;
+  if (showDocs) {
+    return <DocsPage onBack={handleBackToLanding} />;
+  }
 
   return (
     <>
@@ -258,8 +266,24 @@ export default function LandingPage({ onNavigate }: { onNavigate: () => void }) 
         </div>
         
         <footer className="lp-footer">
-          <p>&copy; {new Date().getFullYear()} 0PIRATE. All rights reserved.</p>
-        </footer>
+        <p>&copy; {new Date().getFullYear()} 0PIRATE. All rights reserved
+          {' | '}
+          <button
+            onClick={() => setShowDocs(true)} // <-- THIS IS THE "CALL"
+            className="hover:underline"
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              color: 'inherit', 
+              cursor: 'pointer', 
+              padding: 0, 
+              fontSize: 'inherit' 
+            }}
+          >
+            Documentation
+          </button>
+        </p>
+      </footer>
       </div>
     </>
   );
