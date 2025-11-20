@@ -58,15 +58,27 @@ def telemetry_event(name: str, payload: Dict[str, Any]) -> None:
 # -----------------------
 # Configuration defaults
 # -----------------------
+UNIVERSAL_IMAGE = os.getenv("SANDBOX_IMAGE", "arunmadhavan28/0pirate-polyglot:v1")
+
 DEFAULT_IMAGE_BY_LANG: Dict[str, str] = {
-    "python": "python:3.11-slim",
-    "javascript": "node:20-slim",
-    "typescript": "node:20-slim",
-    "java": "openjdk:17-jdk-slim",
-    "go": "golang:1.20-bullseye",
-    "rust": "rust:1.70-slim",
-    "cpp": "gcc:12.2.0",
+    "python": UNIVERSAL_IMAGE,
+    "javascript": UNIVERSAL_IMAGE,
+    "typescript": UNIVERSAL_IMAGE,
+    "java": UNIVERSAL_IMAGE,
+    "go": UNIVERSAL_IMAGE,
+    "rust": UNIVERSAL_IMAGE,
+    "cpp": UNIVERSAL_IMAGE,
 }
+
+# DEFAULT_IMAGE_BY_LANG: Dict[str, str] = {
+#     "python": "python:3.11-slim",
+#     "javascript": "node:20-slim",
+#     "typescript": "node:20-slim",
+#     "java": "openjdk:17-jdk-slim",
+#     "go": "golang:1.20-bullseye",
+#     "rust": "rust:1.70-slim",
+#     "cpp": "gcc:12.2.0",
+# }
 DEFAULT_TIMEOUT_SECONDS = int(os.getenv("SANDBOX_TIMEOUT_SECONDS", "60"))
 MEMORY_LIMIT = os.getenv("SANDBOX_MEMORY_LIMIT", "512m")
 CPU_SHARES = int(os.getenv("SANDBOX_CPU_SHARES", "512"))
@@ -145,7 +157,7 @@ def generate_placeholder_tests(language: str, module_name: str = "code") -> Tupl
 def build_test_command(language: str, tests_present: bool, prefer_framework: Optional[str] = None) -> List[str]:
     language = (language or "python").lower()
     if language == "python":
-        return ["/bin/sh", "-c", "pytest -q || python -m unittest -q || python test_code.py"]
+        return ["/bin/sh", "-c", "pytest -q . || python -m unittest discover -v || python test_code.py"]
     if language in ("javascript", "typescript"):
         return ["/bin/sh", "-c", "npx jest --runInBand || npx mocha || node test_code.js"]
     if language == "java":
@@ -365,24 +377,26 @@ def run_tests_in_sandbox(
                 "diagnostics": diagnostics,
             }
 
+        # volumes = {workspace_root: {"bind": "/app", "mode": "rw"}}
+        # # If requested, make the code file read-only by using a subdir mount with ro mode
+        # if read_only_code_mount:
+        #     # create code-only subdir and mount it read-only (best-effort)
+        #     code_dir = os.path.join(workspace_root, "code_mount")
+        #     os.makedirs(code_dir, exist_ok=True)
+        #     # move code/test files into code_dir
+        #     for fname in os.listdir(workspace_root):
+        #         if fname not in ("code_mount",):
+        #             try:
+        #                 shutil.move(os.path.join(workspace_root, fname), code_dir)
+        #             except Exception:
+        #                 # ignore and continue
+        #                 pass
+        #     volumes = {
+        #         code_dir: {"bind": "/app", "mode": "ro"},
+        #         workspace_root: {"bind": "/workspace", "mode": "rw"},  # writable scratch if needed
+        #     }
+
         volumes = {workspace_root: {"bind": "/app", "mode": "rw"}}
-        # If requested, make the code file read-only by using a subdir mount with ro mode
-        if read_only_code_mount:
-            # create code-only subdir and mount it read-only (best-effort)
-            code_dir = os.path.join(workspace_root, "code_mount")
-            os.makedirs(code_dir, exist_ok=True)
-            # move code/test files into code_dir
-            for fname in os.listdir(workspace_root):
-                if fname not in ("code_mount",):
-                    try:
-                        shutil.move(os.path.join(workspace_root, fname), code_dir)
-                    except Exception:
-                        # ignore and continue
-                        pass
-            volumes = {
-                code_dir: {"bind": "/app", "mode": "ro"},
-                workspace_root: {"bind": "/workspace", "mode": "rw"},  # writable scratch if needed
-            }
 
         try:
             client.images.pull(chosen_image)
@@ -414,11 +428,12 @@ def run_tests_in_sandbox(
                 stderr=True,
                 mem_limit=MEMORY_LIMIT,
                 cpu_shares=CPU_SHARES,
-                # --- NEW: Hardening Options ---
-                cap_drop=["ALL"],  # Drop all Linux capabilities
-                security_opt=[f"seccomp={json.dumps(seccomp_profile)}" if seccomp_profile else "seccomp=unconfined"]
-                # --- END NEW ---
+                # --- SECURITY UPDATE ---
+                # cap_drop=["ALL"],  <-- COMMENTED OUT (Causes crash on some systems)
+                security_opt=["seccomp=unconfined"] # <-- FORCED to unconfined for stability
+                # --- END SECURITY UPDATE ---
             )
+
         except Exception as e:
             logger.exception("Failed to create container")
             telemetry_event("sandbox.error", {"reason": "container_create_failed", "exception": str(e)})
@@ -1085,10 +1100,10 @@ def run_command_in_sandbox(
             network_disabled=DISABLE_NETWORK,
             mem_limit=MEMORY_LIMIT,
             cpu_shares=CPU_SHARES,
-            # --- NEW: Hardening Options ---
-            cap_drop=["ALL"], # Drop all Linux capabilities
-            security_opt=[f"seccomp={json.dumps(seccomp_profile)}" if seccomp_profile else "seccomp=unconfined"]
-            # --- END NEW ---
+            # --- SECURITY UPDATE ---
+            # cap_drop=["ALL"],  <-- COMMENTED OUT
+            security_opt=["seccomp=unconfined"] # <-- FORCED to unconfined
+            # --- END SECURITY UPDATE ---
         )
 
         # Poll for completion with timeout

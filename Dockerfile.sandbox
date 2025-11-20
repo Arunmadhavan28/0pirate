@@ -1,0 +1,36 @@
+# Use a lightweight Python base, but we will add everything else to it
+FROM python:3.11-slim-bookworm
+
+# 1. Install System Dependencies & Compilers (C/C++, Java, Go)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ build-essential \
+    openjdk-17-jdk-headless \
+    golang-go \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Install Node.js 20 and Common JS Tools (Jest, Mocha, TypeScript)
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g jest mocha typescript ts-node
+
+# 3. Install Rust (Cargo)
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+
+# 4. Install Python Analysis Tools (Pytest, Numpy, Pandas, etc.)
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir \
+    numpy pandas scipy pytest langchain \
+    black flake8 mypy bandit
+
+# 5. Verification (Fail build if tools are missing)
+RUN python --version && \
+    node --version && \
+    java -version && \
+    go version && \
+    cargo --version && \
+    echo "✅ Polyglot Sandbox Ready"

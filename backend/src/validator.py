@@ -593,12 +593,25 @@ def _go_pipeline(file_path: str, code: str, per_tool_image: Dict[str, str]) -> T
     raw: Dict[str, Any] = {}
     
     name = os.path.basename(file_path) or "main.go"
-    files = {name: code}
     
-    # go vet needs module context; we will run go vet on the file path
-    # For sandboxed runner, we just call go vet ./... within a workspace where file is present
-    go_vet_cmd = ["bash", "-lc", "go vet ./..."]
-    res = _run_tool_in_sandbox_safe(go_vet_cmd, files, per_tool_image.get("go") or DEFAULT_IMAGES.get("go"), TOOL_TIMEOUT_SECONDS, "go vet")
+    # [Production Fix] Create a synthetic go.mod so 'go vet' operates in a valid module context.
+    # This prevents "go: cannot find main module" errors.
+    files = {
+        name: code,
+        "go.mod": "module validator\n\ngo 1.21\n"
+    }
+    
+    # Execute directly without shell interpolation for stability
+    go_vet_cmd = ["go", "vet", "."]
+    
+    res = _run_tool_in_sandbox_safe(
+        go_vet_cmd, 
+        files, 
+        per_tool_image.get("go") or DEFAULT_IMAGES.get("go"), 
+        TOOL_TIMEOUT_SECONDS, 
+        "go vet"
+    )
+    
     raw["go vet"] = res.truncated()
     findings.extend(parse_go_vet(res.stderr or ""))
     findings.extend(parse_go_vet(res.stdout or ""))

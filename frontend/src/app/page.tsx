@@ -1485,8 +1485,10 @@ async function createTamperEvidentHash(files: File[], pastedCode: string): Promi
         } else if (task !== "generate_code") {
              // If not generating code and no files ended up here after redaction, error
              return fail("Failed to prepare abstracted code for submission.");
+        
         } else if (task === "generate_code" && abstractedFileEntries.length === 0) {
-            // THIS IS THE FIX YOU STILL NEED TO ADD
+            // [Production Fix] explicitly append empty hash string for Generate Code tasks
+            // with no context files, satisfying the backend integrity check.
             mainFormData.append("tamper_evident_hash", "");
         }
       
