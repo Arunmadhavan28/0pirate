@@ -62,10 +62,9 @@ def fix(
     error_log: Optional[str] = typer.Option(None, "--log", "-l", help="Optional error log/traceback"),
     output: Optional[Path] = typer.Option(None, "--out", "-o", help="Output file (defaults to stdout)"),
     backend: str = typer.Option(DEFAULT_BACKEND_URL, help="Backend URL"),
-    # --- FIX START: Explicitly add these flags ---
+    # --- CI/CD Flags ---
     api_key: Optional[str] = typer.Option(None, "--api-key", help="LLM API Key (OpenAI/Gemini)"),
     auth_token: Optional[str] = typer.Option(None, "--auth-token", help="0Pirate Action Token")
-    # --- FIX END ---
 ):
     """
     Fixes a file. Auto-detects if you are logged in or anonymous.
@@ -106,15 +105,22 @@ def fix(
             
             sha = hashlib.sha256(abstracted_content.encode("utf-8")).hexdigest()
             
+            # [Production Fix] Smart Task Selection
+            # If no error log is provided (like in CI/CD audits), switch to 'fix_and_secure' with a dummy log
+            # to prevent backend rejection.
+            effective_log = error_log
+            if not error_log:
+                effective_log = "No runtime error provided. Please perform a static security audit and fix visible vulnerabilities."
+
             payload = {
                 "task": "fix_and_secure",
                 "provider": "gemini", 
                 "model": "gemini-2.5-pro",
-                "api_key": final_llm_key, # Use the resolved key
+                "api_key": final_llm_key, 
                 "token_saver_enabled": "false",
                 "cove_hardening_enabled": "true",
                 "tamper_evident_hash": sha,
-                "error_log": error_log or "No runtime error provided. Please perform a static security audit."
+                "error_log": effective_log 
             }
             
             # Headers: Send Auth Token if we have it
@@ -128,7 +134,7 @@ def fix(
                 f"{backend}/api/process_code", 
                 data=payload, 
                 files=files_payload,
-                headers=headers # <--- THIS UNLOCKS THE QUOTA
+                headers=headers 
             )
             
             if process_res.status_code == 429:
@@ -141,7 +147,6 @@ def fix(
             # --- STEP 3: POLL ---
             import time
             while True:
-                # We also send headers here so status check is authorized
                 status_res = requests.get(f"{backend}/api/status/{job_id}", headers=headers)
                 if status_res.status_code != 200:
                     continue
