@@ -114,7 +114,7 @@ def fix(
                 "token_saver_enabled": "false",
                 "cove_hardening_enabled": "true",
                 "tamper_evident_hash": sha,
-                "error_log": error_log or ""
+                "error_log": error_log or "No runtime error provided. Please perform a static security audit."
             }
             
             # Headers: Send Auth Token if we have it
