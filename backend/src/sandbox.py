@@ -361,7 +361,7 @@ def run_tests_in_sandbox(
 
         # Start client
         try:
-            client = docker.from_env(timeout=5)
+            client = docker.from_env(timeout=300)
             client.ping()
             diagnostics["docker_ok"] = True
         except Exception as e:

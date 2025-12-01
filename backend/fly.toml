@@ -1,5 +1,6 @@
 app = 'backend-muddy-moon-310'
 primary_region = 'bom'
+swap_size_mb = 1024
 
 [build]
 
@@ -14,7 +15,7 @@ primary_region = 'bom'
 
   # Production Safety: Check /health every 15s to ensure app is alive
   [[http_service.checks]]
-    grace_period = "50s"
+    grace_period = "500s"
     interval = "15s"
     method = "GET"
     timeout = "2s"
@@ -32,3 +33,4 @@ primary_region = 'bom'
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+

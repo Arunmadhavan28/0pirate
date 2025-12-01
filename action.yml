@@ -1,0 +1,24 @@
+name: '0Pirate AI Security Fixer'
+description: 'Automatically find and fix security vulnerabilities in your code using 0Pirate.'
+author: 'Arunmadhavan EVR'
+inputs:
+  api_key:
+    description: 'Your 0Pirate Action Token (Get it from 0pirate.com/account)'
+    required: true
+  llm_key:
+    description: 'Your OpenAI/Gemini API Key'
+    required: true
+  file_pattern:
+    description: 'File to scan (e.g., src/main.py)'
+    required: false
+    default: '**/*.py'
+runs:
+  using: 'docker'
+  image: 'Dockerfile.action'
+  args:
+    - "fix"
+    - ${{ inputs.file_pattern }}
+    - "--api-key"
+    - ${{ inputs.llm_key }}  # Mapping LLM key
+    - "--auth-token"       # We need to add this flag to CLI
+    - ${{ inputs.api_key }}  # Mapping 0Pirate token

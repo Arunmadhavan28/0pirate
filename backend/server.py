@@ -98,7 +98,7 @@ supabase: Client = create_client(settings.supabase_url, settings.supabase_key)
 JOB_STORE: Dict[str, Dict[str, Any]] = {}
 
 TIER_LIMITS = {
-    "free": {"max_jobs_per_day": 2, "max_files": 5},
+    "free": {"max_jobs_per_day": 20, "max_files": 5},
     "developer": {"max_jobs_per_day": 50, "max_files": 20},
     "professional": {"max_jobs_per_day": 200, "max_files": 50},
     "enterprise": {"max_jobs_per_day": 500, "max_files": 100},

@@ -520,11 +520,11 @@ def process_code_submission(
             output_result = repaired_files if token_saver else final_abstracted_files
             
             # De-abstract before returning
-            output_result = {
-                filename: re.sub(r'<<STRING_[a-f0-9]+>>', '"<redacted>"', 
-                                re.sub(r'<<COMMENT_[a-f0-9]+>>', '', content))
-                for filename, content in output_result.items()
-            }
+            # output_result = {
+            #     filename: re.sub(r'<<STRING_[a-f0-9]+>>', '"<redacted>"', 
+            #                     re.sub(r'<<COMMENT_[a-f0-9]+>>', '', content))
+            #     for filename, content in output_result.items()
+            # }
             
             notice_message = f"Task '{task}' completed successfully."
             if task == "fix_and_secure" and sandbox_result:

@@ -614,6 +614,17 @@ def parsemultifileresponse(response_text: str) -> Dict[str, str]:
             modified_files[path] = ensurecodeformat(code)
     if modified_files:
         return modified_files
+    #3.5 
+    pattern_loose = re.compile(r"File:\s*(.*?)\n```(?:\s*([\w+-.#]*))?\n([\s\S]*?)\n```", re.MULTILINE)
+    for m in pattern_loose.finditer(text):
+        path = m.group(1).strip().strip("*") # Clean up accidental asterisks
+        code = m.group(3)
+        # Only add if we haven't found it yet
+        if path and path not in modified_files:
+            modified_files[path] = ensurecodeformat(code)
+
+    if modified_files:
+        return modified_files
 
     # 4) If none of the above matched, extract all fenced code blocks and attempt to infer filenames
     code_blocks = extractfencedcodeblocks(text)

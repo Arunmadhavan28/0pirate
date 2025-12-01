@@ -1,0 +1,17 @@
+# Use a lightweight Python base
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install git
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
+# Install dependencies (Note the path change to cli/)
+COPY cli/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the CLI code (Note the path change to cli/)
+COPY cli/main.py .
+
+# Entrypoint: Run the CLI
+ENTRYPOINT ["python", "/app/main.py"]

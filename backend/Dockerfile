@@ -1,33 +1,32 @@
-# Use the full image instead of slim to ensure robust SSL/Build libraries
-FROM python:3.11
+FROM python:3.11-slim-bookworm
 
 WORKDIR /app
 
-# Upgrade pip to the latest version immediately
-RUN pip install --no-cache-dir --upgrade pip
+# 1. Install System Deps AND Docker Client/Daemon
+# 'docker.io' provides the daemon and client on Debian Bookworm
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    gcc build-essential \
+    docker.io \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# 2. Install Python Dependencies
 COPY requirements.txt .
-
-# Install heavy dependencies individually first to prevent timeout/SSL choke
-# This isolates the failure if it happens again
-RUN pip install --no-cache-dir numpy pandas
-RUN pip install --no-cache-dir langchain
-
-# Install the rest of the dependencies
-# Increased timeout and trusted-host flags bypass some SSL inspection issues
-RUN pip install --no-cache-dir \
-    --default-timeout=1000 \
-    --trusted-host pypi.org \
-    --trusted-host files.pythonhosted.org \
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --default-timeout=1000 \
+    --trusted-host pypi.org --trusted-host files.pythonhosted.org \
     pytest \
     -r requirements.txt
 
-# Copy the rest of your backend
+# 3. Copy Code & Entrypoint
 COPY . .
+COPY entrypoint.sh /entrypoint.sh
 
-# Expose API port
+# 4. Make script executable
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 8080
 
-# Start FastAPI app
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]
+# 5. Set the Entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
