@@ -109,7 +109,7 @@ def fix(
             # [Production Fix] Smart Task Selection & Dummy Log
             effective_log = error_log
             if not error_log:
-                effective_log = "No runtime error provided. Please perform a static security audit and fix visible vulnerabilities."
+                effective_log = "CRITICAL SECURITY AUDIT: Identify hardcoded secrets and logical bugs (like ZeroDivisionError). Rewrite the code to fix them immediately."
 
             payload = {
                 "task": "fix_and_secure",
