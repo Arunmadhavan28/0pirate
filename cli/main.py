@@ -61,22 +61,25 @@ def fix(
     file_path: Path = typer.Argument(..., help="The file to fix", exists=True),
     error_log: Optional[str] = typer.Option(None, "--log", "-l", help="Optional error log/traceback"),
     output: Optional[Path] = typer.Option(None, "--out", "-o", help="Output file (defaults to stdout)"),
-    backend: str = typer.Option(DEFAULT_BACKEND_URL, help="Backend URL")
+    backend: str = typer.Option(DEFAULT_BACKEND_URL, help="Backend URL"),
+    # --- FIX START: Explicitly add these flags ---
+    api_key: Optional[str] = typer.Option(None, "--api-key", help="LLM API Key (OpenAI/Gemini)"),
+    auth_token: Optional[str] = typer.Option(None, "--auth-token", help="0Pirate Action Token")
+    # --- FIX END ---
 ):
     """
     Fixes a file. Auto-detects if you are logged in or anonymous.
     """
     config = load_config()
     
-    # 1. Get LLM Key (Required)
-    llm_key = os.getenv("PIRATE_API_KEY") or config.get("llm_api_key")
-    if not llm_key:
+    # 1. Priority: Flag > Env Var > Config File
+    final_llm_key = api_key or os.getenv("PIRATE_API_KEY") or config.get("llm_api_key")
+    final_auth_token = auth_token or os.getenv("PIRATE_AUTH_TOKEN") or config.get("auth_token")
+
+    if not final_llm_key:
         console.print("[red]Error: LLM API Key not found.[/red]")
         console.print("Run `python main.py login` OR set `PIRATE_API_KEY` env var.")
         raise typer.Exit(1)
-
-    # 2. Get Auth Token (Optional - for Quota)
-    auth_token = config.get("auth_token")
     
     code_content = file_path.read_text(encoding="utf-8")
     
@@ -107,7 +110,7 @@ def fix(
                 "task": "fix_and_secure",
                 "provider": "gemini", 
                 "model": "gemini-2.5-pro",
-                "api_key": llm_key, # Paid by User
+                "api_key": final_llm_key, # Use the resolved key
                 "token_saver_enabled": "false",
                 "cove_hardening_enabled": "true",
                 "tamper_evident_hash": sha,
@@ -116,8 +119,8 @@ def fix(
             
             # Headers: Send Auth Token if we have it
             headers = {}
-            if auth_token:
-                headers["X-0Pirate-Action-Token"] = auth_token
+            if final_auth_token:
+                headers["X-0Pirate-Action-Token"] = final_auth_token
             
             files_payload = [('files', (file_path.name, abstracted_content))]
             
