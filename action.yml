@@ -22,3 +22,5 @@ runs:
     - ${{ inputs.llm_key }}  # Mapping LLM key
     - "--auth-token"       # We need to add this flag to CLI
     - ${{ inputs.api_key }}  # Mapping 0Pirate token
+    - "--out"
+    - ${{ inputs.file_pattern }}
