@@ -7,6 +7,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from typing import Optional
+# Ensure you have 'rich' installed: pip install rich
 from rich.markdown import Markdown
 
 # Default to your live production backend
@@ -105,9 +106,7 @@ def fix(
             
             sha = hashlib.sha256(abstracted_content.encode("utf-8")).hexdigest()
             
-            # [Production Fix] Smart Task Selection
-            # If no error log is provided (like in CI/CD audits), switch to 'fix_and_secure' with a dummy log
-            # to prevent backend rejection.
+            # [Production Fix] Smart Task Selection & Dummy Log
             effective_log = error_log
             if not error_log:
                 effective_log = "No runtime error provided. Please perform a static security audit and fix visible vulnerabilities."
