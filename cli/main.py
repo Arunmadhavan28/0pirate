@@ -7,7 +7,6 @@ from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from typing import Optional
-# Ensure you have 'rich' installed: pip install rich
 from rich.markdown import Markdown
 
 # Default to your live production backend
@@ -107,6 +106,7 @@ def fix(
             sha = hashlib.sha256(abstracted_content.encode("utf-8")).hexdigest()
             
             # [Production Fix] Smart Task Selection & Dummy Log
+            # This prevents the backend from rejecting the request when running in CI
             effective_log = error_log
             if not error_log:
                 effective_log = "CRITICAL SECURITY AUDIT: Identify hardcoded secrets and logical bugs (like ZeroDivisionError). Rewrite the code to fix them immediately."
