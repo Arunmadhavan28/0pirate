@@ -1,11 +1,9 @@
 <div align="center">
-  <img src="https://i.imgur.com/your-logo.png" alt="0Pirate Logo" width="200" />
+  <img src="./logo.png" alt="0Pirate Logo" width="200" />
   <h1>0Pirate</h1>
   <p><b>The Zero-Knowledge AI Proxy for Enterprise Code</b></p>
   
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-  [![Tests](https://github.com/yourusername/0pirate/actions/workflows/tests.yml/badge.svg)](https://github.com/yourusername/0pirate/actions)
-  [![Discord](https://img.shields.io/discord/1234567890?color=7289da&label=Discord&logo=discord&logoColor=ffffff)](https://discord.gg/yourserver)
 </div>
 
 ---
@@ -64,7 +62,7 @@ Get the entire 0Pirate stack running locally in under 60 seconds.
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/0pirate.git
+git clone https://github.com/Arunmadhavan28/0pirate.git
 cd 0pirate
 
 # 2. Set up your environment variables
@@ -95,8 +93,7 @@ Dive deeper into how 0Pirate achieves Zero-Knowledge AI coding:
 
 ## 🤝 Community & Support
 
-- Join our [Discord Server](https://discord.gg/yourserver) for live discussions.
-- Report issues and request features on our [GitHub Issues](https://github.com/yourusername/0pirate/issues) page.
+- Report issues and request features on our [GitHub Issues](https://github.com/Arunmadhavan28/0pirate/issues) page.
 
 ## 📄 License
 
