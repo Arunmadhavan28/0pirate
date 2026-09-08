@@ -44,6 +44,6 @@ npm run dev
 
 ## 🐞 Reporting Bugs
 
-If you find a security flaw or a redaction bypass, **please do not open a public issue.** Email us directly at security@yourdomain.com.
+If you find a security flaw or a redaction bypass, **please do not open a public issue.** Email us. 
 
 For general bugs (UI glitches, CLI errors), please use the GitHub Issue tracker and provide steps to reproduce.
