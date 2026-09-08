@@ -14,6 +14,7 @@ PROVIDER_MAP = {
     "mistral": "mistral_provider",
     "qwen": "qwen_provider",
     "groq": "groq_provider",
+    "openrouter": "openrouter_provider",
 }
 
 def get_provider(provider_name: str, api_keys: Optional[Dict[str, str]] = None) -> LLMProvider:

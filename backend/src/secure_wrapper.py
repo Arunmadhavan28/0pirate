@@ -274,7 +274,7 @@ def process_code_submission(
                         redis_client.set(cache_key_gen_test, final_response_text, ex=3600)
                         logger.info(f"Stored (Gen Test) in cache: {cache_key_gen_test[:15]}...")
                     except Exception as e: logger.error(f"Redis SET failed (Gen Test): {e}")
-            # --- END CACHE LOGIC ---
+            
 
             generated_files = optimizer_module.parsemultifileresponse(final_response_text)
 

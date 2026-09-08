@@ -3,18 +3,32 @@ services:
   backend:
     build: ./backend
     ports:
-      - "5001:8080"  # Exposes the container's port 8080 (from your CMD) to host port 5001
+      - "5001:8080"
     environment:
-      
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_KEY}
-      - REDIS_URL=${REDIS_URL}
+      - REDIS_URL=redis://redis:6379/0
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
     env_file: .env
     volumes:
+      # Required for the secure code sandbox
       - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
   frontend:
     build:
       context: ./frontend
     ports:
-      - "3000:5001"
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_BACKEND_URL=http://localhost:5001
+      - NEXT_PUBLIC_SUPABASE_URL=${SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${SUPABASE_KEY}
     env_file: .env

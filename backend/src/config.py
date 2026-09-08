@@ -19,7 +19,7 @@ class Settings:
     # LLM Provider API Keys
     openai_key: str | None = os.getenv("OPENAI_API_KEY")
     anthropic_key: str | None = os.getenv("ANTHROPIC_API_KEY")
-    google_key: str | None = os.getenv("GOOGLE_API_KEY")  # Gemini
+    google_key: str | None = os.getenv("GOOGLE_API_KEY")  
     deepseek_key: str | None = os.getenv("DEEPSEEK_API_KEY")
     mistral_key: str | None = os.getenv("MISTRAL_API_KEY")
     groq_key: str | None = os.getenv("GROQ_API_KEY")

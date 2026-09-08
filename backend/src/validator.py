@@ -17,6 +17,7 @@ Notes:
 - You must provide images that include the requested tool chains (or adjust DEFAULT_IMAGES).
 - This file intentionally keeps logic deterministic and avoids executing user-provided code.
 """
+
 from __future__ import annotations
 import ast
 import re
@@ -73,6 +74,7 @@ DEFAULT_IMAGES = {
 # ----------------------------
 # Data classes for internal clarity
 # ----------------------------
+
 @dataclass
 class ToolResult:
     tool: str
@@ -833,6 +835,7 @@ def validate_path(path: str, include_patterns: Optional[Iterable[str]] = None, e
 # ----------------------------
 # Convenience higher-level APIs to match original single-file behavior
 # ----------------------------
+
 def validate_code(code: str, filename_hint: Optional[str] = None) -> Dict[str, Any]:
     """
     Backwards-compatible single-file API. Returns a normalized report for a single code string.
@@ -943,7 +946,7 @@ def _cli_main(argv):
 if __name__ == "__main__":
     _cli_main(sys.argv)
 
-# End of validator.py
+
 """
 Deployment notes and recommendations (short):
 - Ensure run_command_in_sandbox provides proper isolation (containerization, resource limits, network disabled).

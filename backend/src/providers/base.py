@@ -4,6 +4,9 @@ from abc import ABC, abstractmethod
 class LLMProvider(ABC):
     name: str = "base"
 
+    def __init__(self, api_key: str | None = None):
+        self.api_key = api_key
+
     @abstractmethod
     def complete(self, prompt: str, model: str | None = None, **kwargs) -> str:
         """
