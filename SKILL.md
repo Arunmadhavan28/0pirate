@@ -1,7 +1,7 @@
 ---
 name: 0pirate-secure-coding
 description: Read and write code through the 0Pirate zero-knowledge proxy so secrets and proprietary logic never reach the LLM. Use when touching any repo file that may contain credentials, PII, or IP.
-version: 0.2.0
+version: 0.2.1
 ---
 
 # 0Pirate Secure Coding Skill

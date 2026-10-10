@@ -37,7 +37,7 @@ logger = logging.getLogger("0pirate-mcp")
 server = MCPServer(
     name="0pirate-secure-proxy",
     title="0Pirate Secure Proxy",
-    version="0.2.0",
+    version="0.2.1",
     description=(
         "Local zero-knowledge proxy for AI coding. "
         "Reads files, strips secrets/PII and abstracts proprietary logic "
@@ -323,7 +323,7 @@ def secure_review(target: str) -> str:
 async def health_check(request):  # type: ignore[no-untyped-def]
     from starlette.responses import JSONResponse
 
-    return JSONResponse({"status": "ok", "server": "0pirate-secure-proxy", "version": "0.2.0"})
+    return JSONResponse({"status": "ok", "server": "0pirate-secure-proxy", "version": "0.2.1"})
 
 
 def main() -> None:
