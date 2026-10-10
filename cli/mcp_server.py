@@ -28,6 +28,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from engine import run_redaction
+from abstractor import AbstractionFailed
 from main import restore_code
 
 logging.basicConfig(level=logging.INFO)
@@ -168,6 +169,16 @@ def read_secure_file(file_path: str) -> str:
             f"Keep placeholders intact when editing.]\n\n"
         )
         return header + abstracted
+    except AbstractionFailed as e:
+        # Fail closed and say so: the file cannot be proven safe (parse
+        # failure or surviving identifiers/secrets), so nothing is returned
+        # to the model. Fix the syntax or narrow the allow_list, then retry.
+        append_audit_log(repo_root, "READ_BLOCKED_UNSAFE", f"File: {path.name} | Reason: {e}")
+        return (
+            f"[0Pirate Security Block: '{path.name}' was NOT sent to the model. "
+            f"It cannot be safely abstracted ({e}). No content from this file "
+            f"has left your machine.]"
+        )
     except Exception as e:
         logger.exception("redaction failed")
         return f"Error during local redaction: {e}"

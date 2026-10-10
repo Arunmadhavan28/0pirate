@@ -17,17 +17,18 @@ Features:
 
 from __future__ import annotations
 import ast
+import builtins
+import keyword
 import os
 import re
 import json
 import time
 import hashlib
 import logging
-import builtins
 import random
 import string
 from pathlib import Path
-from typing import Tuple, Dict, List, Optional, Callable, Any
+from typing import Tuple, Dict, List, Optional, Callable, Any, Set
 import concurrent.futures
 import argparse
 
@@ -64,6 +65,148 @@ if not logger.handlers:
     logger.addHandler(handler)
     logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
+# -------------------------------
+# Fail-closed errors & keyword sets
+# -------------------------------
+class AbstractionFailed(RuntimeError):
+    """Raised when code cannot be abstracted without risking identifier leakage.
+
+    Callers MUST treat this as a block: never send the unabstracted (or
+    partially abstracted) content to a model. This is the fail-closed path
+    for parser failures and failed leak verification.
+    """
+
+
+# Reserved words that must survive abstraction so the LLM still sees code
+# structure. Kept deliberately tight (reserved words only, never domain
+# words) so no proprietary identifier can hide behind this list.
+_PYTHON_KEYWORDS = set(keyword.kwlist)
+
+_C_LIKE_KEYWORDS = {
+    # JavaScript / TypeScript
+    "break", "case", "catch", "class", "const", "continue", "debugger",
+    "default", "delete", "do", "else", "export", "extends", "finally",
+    "for", "function", "if", "import", "in", "instanceof", "new",
+    "return", "super", "switch", "this", "throw", "try", "typeof",
+    "var", "void", "while", "with", "yield", "let", "static", "enum",
+    "await", "implements", "package", "protected", "interface",
+    "private", "public",
+    # Java
+    "abstract", "assert", "boolean", "byte", "char", "double", "final",
+    "float", "goto", "int", "long", "native", "short", "synchronized",
+    "throws", "transient", "volatile", "strictfp",
+    # C / C++
+    "auto", "extern", "register", "restrict", "signed", "sizeof",
+    "struct", "typedef", "union", "unsigned", "inline", "nullptr",
+    "constexpr", "decltype",
+    # Shared literals / singletons
+    "null", "true", "false", "undefined", "nil",
+}
+
+_LANGUAGE_KEYWORDS: Dict[str, Set[str]] = {
+    "python": _PYTHON_KEYWORDS,
+    "javascript": _C_LIKE_KEYWORDS,
+    "typescript": _C_LIKE_KEYWORDS,
+    "java": _C_LIKE_KEYWORDS,
+    # Unknown language: union of everything known. A file we cannot
+    # classify may still contain another language's keywords, so only the
+    # union is safe to preserve. Anything else gets abstracted.
+    "unknown": _PYTHON_KEYWORDS | _C_LIKE_KEYWORDS,
+}
+
+# Names that are never proprietary: interpreter builtins plus the
+# conventional receiver names. Everything else is treated as potentially
+# identifying and must be abstracted (or the read is blocked).
+_NEVER_PROPRIETARY = (
+    set(dir(builtins)) | {"self", "cls", "True", "False", "None"}
+)
+
+
+def _skip_words(language: str) -> Set[str]:
+    """Identifiers that may survive abstraction for a given language."""
+    return _LANGUAGE_KEYWORDS.get(language, _LANGUAGE_KEYWORDS["unknown"]) | _NEVER_PROPRIETARY
+
+
+_PLACEHOLDER_RE = re.compile(r"(<<[^<>]+>>)")  # group kept so split() retains spans
+_IDENTIFIER_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+# Shared with regex_abstract below: strings/comments are replaced wholesale,
+# so their inner words are never "identifiers" for leak-check purposes.
+_STRING_RE = re.compile(
+    r"('''.*?'''|\"\"\".*?\"\"\"|'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|`(?:\\.|[^`\\])*`)",
+    re.DOTALL,
+)
+_COMMENT_RE = re.compile(r"//[^\n]*|#([^\n]*)|/\*[\s\S]*?\*/")
+
+
+def _code_segments(text: str) -> List[str]:
+    """Split text keeping placeholder spans (odd indices) so they are never touched."""
+    return _PLACEHOLDER_RE.split(text)
+
+
+def assert_no_identifier_leak(
+    original: str,
+    abstracted: str,
+    abstraction_map: Dict[str, str],
+    language: str = "unknown",
+    allow_list: Optional[Set[str]] = None,
+    strict: bool = True,
+) -> None:
+    """Verify no custom identifier from `original` survives in `abstracted`.
+
+    Args:
+        original: source text to harvest identifiers from. Pass the
+            redacted (AST-safe) form so secret values are out of scope here;
+            secret values are checked separately by the caller.
+        abstracted: the model-facing output under verification.
+        abstraction_map: original -> placeholder mapping produced alongside
+            `abstracted`. Every identifier-like key must be absent from the
+            visible (placeholder-stripped) output.
+        language: selects the keyword skip-set.
+        allow_list: identifiers the operator explicitly approved to survive.
+        strict: when True (fallback paths for JS/TS/Java/unknown), EVERY
+            non-skipped identifier in `original` must have been abstracted
+            (i.e. be a key of `abstraction_map`). When False (Python AST
+            path, which intentionally preserves import aliases), only the
+            mapped-keys-absent check applies.
+
+    Raises:
+        AbstractionFailed: on any verification failure. The caller must
+            block the model-facing read.
+    """
+    skip = _skip_words(language) | (set(allow_list) if allow_list else set())
+
+    # Strings and comments are replaced wholesale by the abstractor, so words
+    # inside them can never leak as identifiers. Strip them before harvesting
+    # (using the same patterns the fallback uses) to avoid false blocks on
+    # prose like "# Fixture: ...".
+    scrubbed = _STRING_RE.sub(" ", original)
+    scrubbed = _COMMENT_RE.sub(" ", scrubbed)
+    visible = _PLACEHOLDER_RE.sub(" ", abstracted)
+
+    harvested: Set[str] = set()
+    for i, seg in enumerate(_code_segments(scrubbed)):
+        if i % 2 == 1:  # placeholder span, not source
+            continue
+        harvested.update(_IDENTIFIER_RE.findall(seg))
+    harvested -= skip
+
+    if strict:
+        unmapped = sorted(h for h in harvested if h not in abstraction_map)
+        if unmapped:
+            raise AbstractionFailed(
+                f"fallback left {len(unmapped)} identifier(s) unabstracted, "
+                f"blocking read (e.g. {unmapped[:3]})"
+            )
+
+    for orig in abstraction_map:
+        if not _IDENTIFIER_RE.fullmatch(orig):
+            continue  # string/number/comment keys, not identifiers
+        if orig in skip:
+            continue
+        if re.search(rf"\b{re.escape(orig)}\b", visible):
+            raise AbstractionFailed(
+                f"abstracted output still contains identifier {orig!r}, blocking read"
+            )
 # -------------------------------
 # Utilities
 # -------------------------------
@@ -159,11 +302,25 @@ class PythonAbstractor(ast.NodeTransformer):
 # -------------------------------
 # Regex Abstractor (JS/TS/Java/Unknown)
 # -------------------------------
-def regex_abstract(code: str, level: str = "basic", salt: Optional[str] = None) -> Tuple[str, Dict[str, str]]:
+def regex_abstract(
+    code: str,
+    level: str = "basic",
+    salt: Optional[str] = None,
+    language: str = "unknown",
+    allow_list: Optional[Set[str]] = None,
+    pre_mapped: Optional[Dict[str, str]] = None,
+) -> Tuple[str, Dict[str, str]]:
     mapping: Dict[str, str] = {}
     def make_ph(original: str, category: str) -> str:
         if original in mapping: return mapping[original]
-        ph = stable_placeholder(original, category, salt=salt)
+        # Reuse an earlier stage's placeholder for the same identifier so
+        # one name never gets two labels (e.g. AST says <<FUNC_h>> at the
+        # def site, regex must not mint <<IDENT_h>> at a call site and
+        # orphan the first one beyond restore).
+        if pre_mapped and original in pre_mapped:
+            ph = pre_mapped[original]
+        else:
+            ph = stable_placeholder(original, category, salt=salt)
         base, suffix = ph, 0
         while ph in mapping.values():
             suffix += 1
@@ -171,11 +328,25 @@ def regex_abstract(code: str, level: str = "basic", salt: Optional[str] = None) 
         mapping[original] = ph
         return ph
 
-    string_pattern = re.compile(r"('''.*?'''|\"\"\".*?\"\"\"|'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"|`(?:\\.|[^`\\])*`)", re.DOTALL)
-    code = string_pattern.sub(lambda m: make_ph(m.group(0), "STRING"), code)
+    code = _STRING_RE.sub(lambda m: make_ph(m.group(0), "STRING"), code)
     number_pattern = re.compile(r"\b-?\d+(\.\d+)?([eE][+-]?\d+)?\b")
     code = number_pattern.sub(lambda m: make_ph(m.group(0), "NUMBER"), code)
-    code = re.sub(r"//[^\n]*|#([^\n]*)|/\*[\s\S]*?\*/", lambda m: make_ph(m.group(0), "COMMENT"), code)
+    code = _COMMENT_RE.sub(lambda m: make_ph(m.group(0), "COMMENT"), code)
+
+    # Identifier pass: without this, the regex fallback leaks every
+    # function/variable/class name to the model. Only placeholder spans are
+    # skipped (split on <<..>> first) so generated hashes are never touched;
+    # reserved words, builtins, and the caller's allow_list (e.g. secret
+    # placeholders the engine protects) survive so structure stays readable
+    # and restore chains stay intact.
+    skip = _skip_words(language) | set(allow_list or ())
+    segments = _code_segments(code)
+    for i in range(0, len(segments), 2):  # even indices are real code
+        segments[i] = _IDENTIFIER_RE.sub(
+            lambda m: m.group(0) if m.group(0) in skip else make_ph(m.group(0), "IDENT"),
+            segments[i],
+        )
+    code = "".join(segments)
     return code, mapping
 
 
@@ -187,8 +358,11 @@ def _python_wrapper(code: str, level: str, salt: Optional[str], noise: bool, chu
     """Orchestrates abstraction for Python, handling chunking, noise, and fallbacks."""
     try:
         tree = ast.parse(code)
-    except SyntaxError:
-        return regex_abstract(code, salt=salt)
+    except SyntaxError as e:
+        # Fail closed: a file we cannot parse cannot be proven safe, so we
+        # refuse to serve a weaker regex abstraction to the model. The
+        # caller must block the read (see AbstractionFailed).
+        raise AbstractionFailed(f"Python parse failed ({e}); refusing weak fallback") from e
 
     if chunking:
         abstracted_blocks: List[str] = []
@@ -199,7 +373,13 @@ def _python_wrapper(code: str, level: str, salt: Optional[str], noise: bool, chu
             transformer = PythonAbstractor(salt=salt, allow_list=allow_list)
             transformed_chunk = transformer.visit(block_ast)
             abstracted_code_chunk = ast.unparse(transformed_chunk)
-            chunk_scrubbed, comment_map = regex_abstract(abstracted_code_chunk, salt=salt)
+            chunk_scrubbed, comment_map = regex_abstract(
+                abstracted_code_chunk,
+                salt=salt,
+                language="python",
+                allow_list=allow_list,
+                pre_mapped=transformer.mapping,
+            )
             abstracted_blocks.append(chunk_scrubbed)
             global_mapping.update(transformer.mapping)
             global_mapping.update(comment_map)
@@ -210,7 +390,13 @@ def _python_wrapper(code: str, level: str, salt: Optional[str], noise: bool, chu
         transformer = PythonAbstractor(salt=salt, allow_list=allow_list)
         transformed_tree = transformer.visit(tree)
         abstracted_code = ast.unparse(transformed_tree)
-        abstracted_code, comment_map = regex_abstract(abstracted_code, salt=salt)
+        abstracted_code, comment_map = regex_abstract(
+            abstracted_code,
+            salt=salt,
+            language="python",
+            allow_list=allow_list,
+            pre_mapped=transformer.mapping,
+        )
         mapping = {**transformer.mapping, **comment_map}
 
     if noise:
@@ -246,17 +432,28 @@ def abstract_single_file_text(
 ) -> Tuple[str, Dict[str, str]]:
     lang = detect_language(code, filename_hint=filename_hint)
     abstractor = REGISTRY.get(lang, REGISTRY["unknown"])
-    try:
-        if lang == "python":
+    if lang == "python":
+        # No safety net here by design: _python_wrapper raises
+        # AbstractionFailed on parse errors so the caller blocks the read
+        # instead of serving a weaker abstraction. Only unexpected errors
+        # (bugs) fall through to the except below.
+        try:
             # Pass the allow_list down to the python wrapper
             return abstractor(code, level, salt, noise, chunking, allow_list=allow_list)
-        else:
-            # Regex abstractor does not currently use an allow list, but could be modified in the future
-            return abstractor(code, salt=salt)
+        except AbstractionFailed:
+            raise
+        except Exception as e:
+            if METRICS_ENABLED: MET_ERRORS.inc()
+            logger.exception("Python abstractor hit unexpected error", exc_info=e)
+            raise AbstractionFailed(f"Python abstraction errored ({e}); refusing weak fallback") from e
+    try:
+        return abstractor(code, salt=salt, language=lang, allow_list=allow_list)
+    except AbstractionFailed:
+        raise
     except Exception as e:
         if METRICS_ENABLED: MET_ERRORS.inc()
         logger.exception("Abstractor failed, falling back to basic regex", exc_info=e)
-        return regex_abstract(code, salt=salt)
+        return regex_abstract(code, salt=salt, language="unknown", allow_list=allow_list)
 
 def restore_from_mapping(abstracted_code: str, mapping: Dict[str, str]) -> str:
     reverse = {v: k for k, v in mapping.items()}

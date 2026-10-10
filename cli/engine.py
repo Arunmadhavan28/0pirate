@@ -3,7 +3,12 @@ import re
 import sys
 import json
 from redactor import redact
-from abstractor import abstract_single_file_text
+from abstractor import (
+    AbstractionFailed,
+    abstract_single_file_text,
+    assert_no_identifier_leak,
+    detect_language,
+)
 from typing import Optional
 
 
@@ -30,12 +35,14 @@ def _ast_safe(content: str) -> tuple[str, dict[str, str]]:
 def run_redaction(project_files: dict[str, str], allow_list: Optional[list[str]] = None) -> dict:
     """
     Takes raw project files and returns abstracted files and the necessary mapping data.
+
+    Fail-closed contract: raises AbstractionFailed if any file cannot be
+    proven safe (parse failure, or identifiers/secrets surviving in the
+    output). Callers MUST block the model-facing read on this exception,
+    never send the content, weakened or otherwise.
     """
     redacted_files, secret_maps = {}, {}
     abstracted_files, abstraction_maps = {}, {}
-    
-    # Convert list to a set for efficient lookups
-    allow_set = set(allow_list) if allow_list else None
 
     for path, content in project_files.items():
         # Step 1: Redact secrets and PII (no change here)
@@ -50,7 +57,10 @@ def run_redaction(project_files: dict[str, str], allow_list: Optional[list[str]]
         merged_allow.update(reverse.keys())  # don't abstract secret placeholders
         merged_allow.update(secret_map.keys())  # belt-and-braces (<<..>> form)
 
-        # Step 2: Abstract the redacted code, now with the allow_list
+        # Step 2: Abstract the redacted code, now with the allow_list.
+        # May raise AbstractionFailed on parse failure: intentional, the
+        # caller must block instead of serving a weaker abstraction.
+        lang = detect_language(safe_content, filename_hint=path)
         abstracted_safe, abstraction_map = abstract_single_file_text(
             safe_content,
             filename_hint=path,
@@ -71,6 +81,24 @@ def run_redaction(project_files: dict[str, str], allow_list: Optional[list[str]]
             fixed_map[fixed_orig] = fixed_ph
         for temp, back in reverse.items():
             abstracted_content = abstracted_content.replace(temp, back)
+
+        # Step 3: Verify before release. Strict for every language the AST
+        # does not cover (fallback paths must hide 100% of identifiers);
+        # mapping-level for Python (which intentionally preserves imports).
+        # Any failure raises AbstractionFailed -> read is blocked.
+        assert_no_identifier_leak(
+            safe_content,
+            abstracted_content,
+            fixed_map,
+            language=lang,
+            allow_list=merged_allow,
+            strict=(lang != "python"),
+        )
+        for secret_value in secret_map.values():
+            if len(secret_value) >= 8 and secret_value in abstracted_content:
+                raise AbstractionFailed(
+                    "a redacted secret value survived into the output, blocking read"
+                )
 
         abstracted_files[path] = abstracted_content
         abstraction_maps[path] = fixed_map

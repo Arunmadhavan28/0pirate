@@ -1,0 +1,11 @@
+# Fixture: unsupported language (deliberately matches no known grammar, so
+# detect_language returns "unknown" and the regex fallback path runs).
+# Fail-closed contract: even on the fallback path, NO custom identifier or
+# secret value may survive into the model-facing output.
+api_key = "sk_live_51MzQ92Jk3L9s8D7f6G5h4J3k2L1"
+
+process_stripe_payment(amount, currency) =>
+  ledger = ProprietaryLedger.new()
+  tax = 100 / amount
+  ledger.settle(amount + tax, currency)
+end

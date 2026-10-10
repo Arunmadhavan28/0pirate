@@ -26,6 +26,7 @@ This repo is protected by 0Pirate zero-knowledge middleware.
 python cli/mcp_server.py                                # stdio
 python cli/mcp_server.py --transport streamable-http --port 8000
 python -m pytest backend/tests -q                       # backend tests
+python -m pytest cli/tests -q                           # fail-closed redaction tests
 ```
 
 ## Config

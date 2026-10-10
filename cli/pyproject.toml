@@ -24,6 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 nlp = ["spacy>=3.7.0"]
 all = ["spacy>=3.7.0", "prometheus-client"]
+dev = ["pytest>=8.0"]
 
 [project.scripts]
 0pirate = "main:app"
