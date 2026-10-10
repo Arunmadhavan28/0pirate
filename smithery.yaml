@@ -1,0 +1,16 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+  commandFunction: |-
+    def get_command(config):
+      return {
+        "command": "python3",
+        "args": ["/app/cli/mcp_server.py"]
+      }
+build:
+  dockerfile: Dockerfile.mcp
+  dockerBuildContext: .
+runtime:
+  python: "3.10"

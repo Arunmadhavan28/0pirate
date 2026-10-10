@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "0pirate-secure-proxy": {
+      "command": "python3",
+      "args": ["/path/to/0pirate/cli/mcp_server.py"],
+      "env": {
+        "REDACTION_SALT": "change-me-in-prod",
+        "REDACTOR_COMPLIANCE": "global"
+      }
+    }
+  }
+}

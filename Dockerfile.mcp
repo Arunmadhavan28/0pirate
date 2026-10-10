@@ -1,0 +1,17 @@
+# 0Pirate MCP server — one-line Docker run
+# docker build -f Dockerfile.mcp -t 0pirate-mcp .
+# docker run -i --rm 0pirate-mcp                       # stdio
+# docker run --rm -p 8000:8000 0pirate-mcp --transport streamable-http --host 0.0.0.0 --port 8000
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+
+WORKDIR /app/cli
+COPY cli/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY cli/ ./
+
+EXPOSE 8000
+
+ENTRYPOINT ["python", "mcp_server.py"]

@@ -1,28 +1,59 @@
-import sys
-import json
-import logging
-import asyncio
+"""0Pirate Secure Agentic Proxy — MCP server (SDK v2).
+
+Exposes zero-knowledge file tools to any MCP client
+(Cursor, Claude Code, VS Code, Windsurf, custom agents).
+
+Transports:
+  stdio (default, local):   python mcp_server.py
+  streamable-http (hosted): python mcp_server.py --transport streamable-http --port 8000
+
+Tools (discover via tools/list, invoke via tools/call):
+  read_secure_file  — read + redact + abstract, returns safe code
+  write_secure_file — rehydrate placeholders + write to disk
+  audit_status      — prove what was blocked, without leaking secrets
+"""
+
+from __future__ import annotations
+
+import argparse
 import base64
-from pathlib import Path
-import yaml
 import datetime
+import logging
+from pathlib import Path
+from typing import Optional
 
-from mcp.server import Server, NotificationOptions
-from mcp.server.models import InitializationOptions
-import mcp.server.stdio
-import mcp.types as types
+import yaml
 
-# Local Zero-Knowledge Engine
+from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
+
 from engine import run_redaction
 from main import restore_code
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("mcp_server")
+logger = logging.getLogger("0pirate-mcp")
 
-server = Server("0Pirate Secure Agentic Proxy")
+server = MCPServer(
+    name="0pirate-secure-proxy",
+    title="0Pirate Secure Proxy",
+    version="0.2.0",
+    description=(
+        "Local zero-knowledge proxy for AI coding. "
+        "Reads files, strips secrets/PII and abstracts proprietary logic "
+        "before the LLM ever sees them, then restores originals locally on write."
+    ),
+    instructions=(
+        "SECURITY POLICY: To read any code file, call read_secure_file — "
+        "never read project files directly. "
+        "To save agent-edited code, call write_secure_file with the "
+        "abstracted placeholders intact. "
+        "Call audit_status to verify what was blocked."
+    ),
+)
 
-# In-memory mapping store to restore code after the agent finishes
-MAPPING_STORE = {}
+# In-memory mapping store. Secrets NEVER leave this process.
+MAPPING_STORE: dict[str, dict] = {}
+
 
 def get_config(repo_root: Path) -> dict:
     config_path = repo_root / ".0pirate.yml"
@@ -33,7 +64,15 @@ def get_config(repo_root: Path) -> dict:
             logger.error(f"Failed to parse .0pirate.yml: {e}")
     return {}
 
-def append_audit_log(repo_root: Path, action: str, details: str):
+
+def find_repo_root(start: Path) -> Path:
+    repo_root = start if start.is_dir() else start.parent
+    while not (repo_root / ".git").exists() and repo_root != repo_root.parent:
+        repo_root = repo_root.parent
+    return repo_root
+
+
+def append_audit_log(repo_root: Path, action: str, details: str) -> None:
     log_path = repo_root / ".0pirate-audit.log"
     timestamp = datetime.datetime.now().isoformat()
     try:
@@ -42,153 +81,259 @@ def append_audit_log(repo_root: Path, action: str, details: str):
     except Exception:
         pass
 
-@server.list_tools()
-async def handle_list_tools() -> list[types.Tool]:
-    """
-    Exposes zero-knowledge tools to the connected agent (Cursor/Claude).
-    """
-    return [
-        types.Tool(
-            name="read_secure_file",
-            description="Reads a local file, runs the 0Pirate zero-knowledge abstraction engine to hide secrets and proprietary logic, and returns the safe, abstracted code to you. YOU MUST USE THIS TO READ FILES.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string", "description": "Absolute or relative path to the file."}
-                },
-                "required": ["file_path"]
-            }
-        ),
-        types.Tool(
-            name="write_secure_file",
-            description="Takes your abstracted code modifications, securely restores the original proprietary logic and secrets using local mapping tables, and writes it back to disk.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "file_path": {"type": "string"},
-                    "abstracted_code": {"type": "string", "description": "The modified code still containing the abstracted placeholders (e.g., func_01, VAR_A)."}
-                },
-                "required": ["file_path", "abstracted_code"]
-            }
+
+BINARY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"}
+DATASET_EXTENSIONS = {".csv", ".tsv", ".sql", ".db", ".sqlite", ".parquet"}
+
+
+@server.tool(
+    description=(
+        "SECURE READ — use this INSTEAD of reading code files directly. "
+        "Reads a local file, strips secrets/PII (API keys, emails, IPs, "
+        "high-entropy strings) and abstracts proprietary identifiers "
+        "to placeholders, then returns the SAFE code. "
+        "Use when: you need context from any .py/.js/.ts/.java file before "
+        "editing, reviewing, or debugging it. "
+        "Do NOT use for images (passed through) or datasets (schema only). "
+        "Example: read_secure_file(file_path='src/auth.py'). "
+        "You MUST pass the returned placeholders through unchanged to "
+        "write_secure_file."
+    ),
+    annotations=ToolAnnotations(
+        title="Secure read",
+        read_only_hint=True,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+)
+def read_secure_file(file_path: str) -> str:
+    path = Path(file_path).expanduser()
+    if not path.exists():
+        return f"Error: File not found at {path}"
+
+    # 1. Binary / image passthrough (preserve multimodal context)
+    if path.suffix.lower() in BINARY_EXTENSIONS:
+        try:
+            encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
+        except Exception as e:
+            return f"Error reading binary file: {e}"
+        return (
+            f"[0Pirate: binary file '{path.name}' passed through unaltered "
+            f"to preserve context.]\nBase64Data:{encoded}"
         )
-    ]
 
-@server.call_tool()
-async def handle_call_tool(name: str, arguments: dict | None) -> list[types.TextContent]:
-    if not arguments:
-        raise ValueError("Missing arguments")
-        
-    if name == "read_secure_file":
-        file_path = Path(arguments["file_path"])
-        if not file_path.exists():
-            return [types.TextContent(type="text", text=f"Error: File not found at {file_path}")]
-            
-        # 1. Image / Binary Passthrough
-        # If the file is an image or binary, we cannot redact text. 
-        # We pass it through directly to preserve multimodal context.
-        binary_extensions = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".pdf"}
-        if file_path.suffix.lower() in binary_extensions:
-            encoded = base64.b64encode(file_path.read_bytes()).decode("utf-8")
-            mime_type = f"image/{file_path.suffix.lower()[1:]}"
-            if mime_type == "image/jpg": mime_type = "image/jpeg"
-            return [
-                types.TextContent(type="text", text=f"[System: Passed through binary file {file_path.name} unaltered to preserve context.]\nBase64Data:{encoded}")
-            ]
-
-        # 2. Sensitive Dataset Protection (HIPAA / PII)
-        # LLMs do not need raw medical/financial datasets to write code. They only need the schema.
-        dataset_extensions = {".csv", ".tsv", ".sql", ".db", ".sqlite", ".parquet"}
-        if file_path.suffix.lower() in dataset_extensions:
-            try:
-                # Only read the very first line (the headers/schema)
-                with open(file_path, "r", encoding="utf-8") as f:
-                    schema = f.readline().strip()
-                return [
-                    types.TextContent(type="text", text=f"[0Pirate Security Block: Raw access to dataset '{file_path.name}' is strictly prohibited to prevent PII/HIPAA leaks. The LLM only requires the schema to write code. Here is the dataset schema/header:]\n\n{schema}")
-                ]
-            except Exception:
-                return [types.TextContent(type="text", text=f"[0Pirate Security Block: Access to binary dataset '{file_path.name}' is strictly prohibited.]")]
-
-        # 3. Text Redaction
+    # 2. Dataset protection — schema only, never raw rows
+    if path.suffix.lower() in DATASET_EXTENSIONS:
         try:
-            code_content = file_path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            return [types.TextContent(type="text", text=f"Error: {file_path} appears to be a binary file but is not a supported image format.")]
-        
-        # Load custom configurations
-        repo_root = file_path.parent
-        while not (repo_root / ".git").exists() and repo_root != repo_root.parent:
-            repo_root = repo_root.parent
-        config = get_config(repo_root)
-        allow_list = config.get("allow_list", [])
-        
-        try:
-            # 100% Local Redaction. No network requests!
-            files_dict = {file_path.name: code_content}
-            redaction_data = run_redaction(files_dict, allow_list=allow_list)
-            
-            abstracted_content = redaction_data["abstracted_files"].get(file_path.name)
-            
-            # Save the mappings locally. They NEVER go to the LLM.
-            MAPPING_STORE[str(file_path)] = {
-                "secret_maps": redaction_data["secret_maps"].get(file_path.name, {}),
-                "abstraction_maps": redaction_data["abstraction_maps"].get(file_path.name, {})
-            }
-            
-            secrets_blocked = len(MAPPING_STORE[str(file_path)]["secret_maps"])
-            logic_abs = len(MAPPING_STORE[str(file_path)]["abstraction_maps"])
-            append_audit_log(repo_root, "READ_SECURE", f"File: {file_path.name} | Secrets Blocked: {secrets_blocked} | Logic Abstracted: {logic_abs}")
-            
-            return [types.TextContent(type="text", text=abstracted_content)]
-            
-        except Exception as e:
-            return [types.TextContent(type="text", text=f"Error during local redaction: {str(e)}")]
-
-    elif name == "write_secure_file":
-        file_path = Path(arguments["file_path"])
-        abstracted_code = arguments["abstracted_code"]
-        
-        mappings = MAPPING_STORE.get(str(file_path))
-        if not mappings:
-            return [types.TextContent(type="text", text=f"Error: Cannot write to {file_path}. You must read it with read_secure_file first to establish a local mapping table.")]
-            
-        try:
-            # Safely restore the original secrets and logic
-            final_code = restore_code(
-                abstracted_code,
-                mappings["secret_maps"],
-                mappings["abstraction_maps"]
+            with open(path, "r", encoding="utf-8") as f:
+                schema = f.readline().strip()
+            return (
+                f"[0Pirate Security Block: raw dataset '{path.name}' withheld "
+                f"to prevent PII/HIPAA leaks. Schema/header only:]\n\n{schema}"
             )
-            
-            file_path.write_text(final_code, encoding="utf-8")
-            
-            repo_root = file_path.parent
-            while not (repo_root / ".git").exists() and repo_root != repo_root.parent:
-                repo_root = repo_root.parent
-            append_audit_log(repo_root, "WRITE_SECURE", f"File: {file_path.name} restored successfully.")
-            
-            return [types.TextContent(type="text", text=f"Successfully restored and wrote to {file_path}")]
-            
-        except Exception as e:
-            return [types.TextContent(type="text", text=f"Error during restoration: {str(e)}")]
-            
+        except Exception:
+            return (
+                f"[0Pirate Security Block: access to dataset "
+                f"'{path.name}' is prohibited.]"
+            )
+
+    # 3. Text redaction (100% local, no network)
+    try:
+        code_content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return f"Error: {path} appears to be binary and is not a supported format."
+
+    repo_root = find_repo_root(path.resolve())
+    config = get_config(repo_root)
+    allow_list = config.get("allow_list", [])
+
+    try:
+        redaction_data = run_redaction({path.name: code_content}, allow_list=allow_list)
+        abstracted = redaction_data["abstracted_files"].get(path.name, "")
+        key = str(path.resolve())
+        MAPPING_STORE[key] = {
+            "secret_maps": redaction_data["secret_maps"].get(path.name, {}),
+            "abstraction_maps": redaction_data["abstraction_maps"].get(path.name, {}),
+            "file_name": path.name,
+        }
+        n_secrets = len(MAPPING_STORE[key]["secret_maps"])
+        n_logic = len(MAPPING_STORE[key]["abstraction_maps"])
+        append_audit_log(
+            repo_root, "READ_SECURE",
+            f"File: {path.name} | Secrets Blocked: {n_secrets} | Logic Abstracted: {n_logic}",
+        )
+        header = (
+            f"[0Pirate: {n_secrets} secret(s) redacted, "
+            f"{n_logic} identifier(s) abstracted. "
+            f"Keep placeholders intact when editing.]\n\n"
+        )
+        return header + abstracted
+    except Exception as e:
+        logger.exception("redaction failed")
+        return f"Error during local redaction: {e}"
+
+
+@server.tool(
+    description=(
+        "SECURE WRITE — use this to save agent-edited code. "
+        "Takes code that still contains 0Pirate placeholders "
+        "(e.g. <<REDACTED_STRIPE_KEY_ab12cd34>>, <<FUNC_a1b2c3>>) and "
+        "restores original secrets/logic from the LOCAL mapping table, "
+        "then writes to disk. "
+        "Use when: you have finished editing code obtained via "
+        "read_secure_file. "
+        "Prerequisite: you MUST call read_secure_file on the same path "
+        "first in this session. Do NOT invent placeholders. "
+        "Example: write_secure_file(file_path='src/auth.py', "
+        "abstracted_code='... edited code with placeholders ...')."
+    ),
+    annotations=ToolAnnotations(
+        title="Secure write",
+        read_only_hint=False,
+        destructive_hint=True,
+        idempotent_hint=False,
+        open_world_hint=False,
+    ),
+)
+def write_secure_file(file_path: str, abstracted_code: str) -> str:
+    path = Path(file_path).expanduser()
+    key = str(path.resolve())
+    mappings = MAPPING_STORE.get(key) or MAPPING_STORE.get(str(path))
+    if not mappings:
+        return (
+            f"Error: no local mapping for {file_path}. "
+            f"Call read_secure_file on this path first to establish "
+            f"the mapping table."
+        )
+    try:
+        final_code = restore_code(
+            abstracted_code,
+            mappings["secret_maps"],
+            mappings["abstraction_maps"],
+        )
+        path.write_text(final_code, encoding="utf-8")
+        repo_root = find_repo_root(path.resolve())
+        append_audit_log(repo_root, "WRITE_SECURE", f"File: {path.name} restored successfully.")
+        return f"Successfully restored and wrote to {path}"
+    except Exception as e:
+        logger.exception("restore failed")
+        return f"Error during restoration: {e}"
+
+
+@server.tool(
+    description=(
+        "AUDIT STATUS — prove privacy without leaking secrets. "
+        "Returns counts of blocked secrets and abstracted identifiers, "
+        "plus recent audit-log lines (metadata only, never secret values). "
+        "Use when: user asks 'what did you hide?', for compliance checks, "
+        "or before sending anything to an LLM. "
+        "Example: audit_status() for session summary, "
+        "audit_status(file_path='src/auth.py') for one file."
+    ),
+    annotations=ToolAnnotations(
+        title="Audit status",
+        read_only_hint=True,
+        idempotent_hint=True,
+        open_world_hint=False,
+    ),
+)
+def audit_status(file_path: Optional[str] = None) -> str:
+    lines: list[str] = []
+    if file_path:
+        key_variants = [str(Path(file_path).expanduser().resolve()), file_path]
+        found = next((MAPPING_STORE[k] for k in key_variants if k in MAPPING_STORE), None)
+        if not found:
+            return f"No session mappings for {file_path} yet. Call read_secure_file first."
+        lines.append(
+            f"File: {found.get('file_name', file_path)} | "
+            f"Secrets blocked: {len(found['secret_maps'])} | "
+            f"Identifiers abstracted: {len(found['abstraction_maps'])}"
+        )
     else:
-        raise ValueError(f"Unknown tool: {name}")
-
-async def main():
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="0pirate-mcp",
-                server_version="0.1.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={},
-                )
-            )
+        total_secrets = sum(len(v["secret_maps"]) for v in MAPPING_STORE.values())
+        total_logic = sum(len(v["abstraction_maps"]) for v in MAPPING_STORE.values())
+        lines.append(
+            f"Session: {len(MAPPING_STORE)} file(s) | "
+            f"Secrets blocked: {total_secrets} | "
+            f"Identifiers abstracted: {total_logic}"
         )
+        for k, v in MAPPING_STORE.items():
+            lines.append(
+                f" - {v.get('file_name', k)}: "
+                f"{len(v['secret_maps'])} secrets, "
+                f"{len(v['abstraction_maps'])} identifiers"
+            )
+
+    # Append recent audit-log tail (metadata only)
+    try:
+        anchor = Path(file_path).expanduser() if file_path else Path.cwd()
+        repo_root = find_repo_root(anchor.resolve())
+        log_path = repo_root / ".0pirate-audit.log"
+        if log_path.exists():
+            tail = log_path.read_text(encoding="utf-8").splitlines()[-5:]
+            lines.append("Recent audit log:")
+            lines.extend(f"  {t}" for t in tail)
+    except Exception:
+        pass
+    return "\n".join(lines)
+
+
+@server.resource(
+    "pirate://audit-log",
+    description="Recent 0Pirate audit events (metadata only, never secret values).",
+    mime_type="text/plain",
+)
+def audit_log_resource() -> str:
+    try:
+        repo_root = find_repo_root(Path.cwd().resolve())
+        log_path = repo_root / ".0pirate-audit.log"
+        if not log_path.exists():
+            return "No audit events yet in this repository."
+        return "\n".join(log_path.read_text(encoding="utf-8").splitlines()[-50:])
+    except Exception as e:
+        return f"Unable to read audit log: {e}"
+
+
+@server.prompt(
+    description="Guided secure-review workflow: read via proxy, audit, then propose a patch."
+)
+def secure_review(target: str) -> str:
+    return (
+        f"Perform a secure review of '{target}':\n"
+        f"1. Call read_secure_file(file_path='{target}') — never read it directly.\n"
+        f"2. Call audit_status(file_path='{target}') and report counts.\n"
+        f"3. Analyze ONLY the abstracted code for bugs/secrets mishandling.\n"
+        f"4. Return a patch that keeps all <<PLACEHOLDERS>> intact, "
+        f"suitable for write_secure_file."
+    )
+
+
+@server.custom_route("/health", methods=["GET"])
+async def health_check(request):  # type: ignore[no-untyped-def]
+    from starlette.responses import JSONResponse
+
+    return JSONResponse({"status": "ok", "server": "0pirate-secure-proxy", "version": "0.2.0"})
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="0Pirate MCP server")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "streamable-http", "sse"],
+        default="stdio",
+        help="MCP transport (default: stdio for local agents)",
+    )
+    parser.add_argument("--host", default="127.0.0.1", help="HTTP host (streamable-http/sse)")
+    parser.add_argument("--port", type=int, default=8000, help="HTTP port (streamable-http/sse)")
+    args = parser.parse_args()
+
+    if args.transport == "stdio":
+        server.run(transport="stdio")
+    elif args.transport == "sse":
+        server.run(transport="sse", host=args.host, port=args.port)
+    else:
+        server.run(transport="streamable-http", host=args.host, port=args.port)
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

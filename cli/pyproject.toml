@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "0pirate"
+version = "0.2.0"
+description = "Zero-Knowledge AI Security Middleware for Agents and IDEs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "0Pirate Team" }]
+dependencies = [
+  "typer>=0.9.0",
+  "requests>=2.31.0",
+  "rich>=13.0.0",
+  "pyyaml>=6.0.0",
+  "regex>=2023.10.3",
+  "mcp>=2.2.0",
+  "starlette>=0.37.0",
+  "uvicorn>=0.30.0",
+]
+
+[project.optional-dependencies]
+nlp = ["spacy>=3.7.0"]
+all = ["spacy>=3.7.0", "prometheus-client"]
+
+[project.scripts]
+0pirate = "main:app"
+0pirate-mcp = "mcp_server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+exclude = ["__pycache__*", "dist*", "*.egg-info*"]

@@ -51,7 +51,8 @@ Standard data loss prevention filters and regex rules treat code like plain text
 
 ### MCP Configuration
 
-Add 0Pirate to your Cursor or Claude Desktop configuration file:
+Add 0Pirate to your Cursor or Claude Desktop configuration file
+(see `mcp.json.example`):
 
 ```json
 {
@@ -63,6 +64,21 @@ Add 0Pirate to your Cursor or Claude Desktop configuration file:
   }
 }
 ```
+
+Hosted / gateway mode (Streamable HTTP, stateless):
+
+```bash
+python cli/mcp_server.py --transport streamable-http --port 8000
+# health: curl localhost:8000/health
+# docker: docker build -f Dockerfile.mcp -t 0pirate-mcp . && docker run -i --rm 0pirate-mcp
+```
+
+Tools: `read_secure_file` (secure read) → `audit_status` (prove what was
+blocked) → `write_secure_file` (restore + save). Resource
+`pirate://audit-log`, prompt `secure_review`. Agent workflow in `SKILL.md`,
+machine-readable docs in `llms.txt`, agent rules in `AGENTS.md`, A2A card in
+`.well-known/agent.json`, REST mirror in `openapi.json`, registry deploy in
+`smithery.yaml`.
 
 Once configured, the agent reads and writes code through the proxy without exposing your underlying secrets or proprietary identifiers.
 

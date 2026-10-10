@@ -1,0 +1,52 @@
+# 0Pirate
+
+> Local zero-knowledge proxy for AI-assisted coding. Strips secrets/PII and
+> abstracts proprietary logic before code reaches any LLM, restores locally on write.
+
+## Docs
+
+- [README](README.md): setup, MCP config, quickstart
+- [ARCHITECTURE](ARCHITECTURE.md): AST parser, token mapping, storage
+- [Skill](SKILL.md): agent workflow (read -> audit -> edit -> write)
+- [Agent Card](.well-known/agent.json): A2A discovery
+- [OpenAPI](openapi.json): REST gateway for non-MCP clients
+
+## MCP tools
+
+- `read_secure_file(file_path: string)`: secure read. Use INSTEAD of direct file reads.
+- `write_secure_file(file_path: string, abstracted_code: string)`: secure write. Requires prior read.
+- `audit_status(file_path?: string)`: privacy counts + audit-log tail. No secret values.
+
+## MCP resources
+
+- `pirate://audit-log`: recent audit events (metadata only).
+
+## MCP prompts
+
+- `secure_review(target: string)`: guided read -> audit -> patch workflow.
+
+## Run
+
+```bash
+# local (stdio, for Cursor / Claude Code / VS Code)
+python cli/mcp_server.py
+
+# hosted (Streamable HTTP, for gateways / serverless)
+python cli/mcp_server.py --transport streamable-http --port 8000
+
+# health
+curl localhost:8000/health
+```
+
+## Install in clients
+
+```json
+{
+  "mcpServers": {
+    "0pirate-secure-proxy": {
+      "command": "python3",
+      "args": ["/path/to/0pirate/cli/mcp_server.py"]
+    }
+  }
+}
+```

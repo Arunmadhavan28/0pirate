@@ -1,6 +1,9 @@
-../
 .venv/
 __pycache__/
 *.pyc
 .vault
 .env
+dist/
+*.egg-info/
+.0pirate-audit.log
+.DS_Store

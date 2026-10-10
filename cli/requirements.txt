@@ -1,4 +1,9 @@
 typer[all]
 requests
 rich
-python-dotenvmcp
+python-dotenv
+pyyaml
+regex
+mcp>=2.2.0
+starlette
+uvicorn
